@@ -2,7 +2,7 @@ package jnet
 
 import (
 	"fmt"
-	"jinx/jinx"
+	"jinx/contract"
 	"net"
 )
 
@@ -63,7 +63,7 @@ func (s *Server) Serve() {
 	select {}
 }
 
-func NewServer(name string) jinx.Server {
+func NewServer(name string) contract.IServer {
 	s := &Server{
 		Name:      name,
 		IPVersion: "tcp4",

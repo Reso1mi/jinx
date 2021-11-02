@@ -1,6 +1,6 @@
-package jinx
+package contract
 
-type Server interface {
+type IServer interface {
 
 	// Start 启动服务器
 	Start()

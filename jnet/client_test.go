@@ -27,7 +27,7 @@ func TestClient(t *testing.T) {
 		if err != nil {
 			fmt.Println("read buf err", err)
 		}
-		fmt.Printf("server return: %s, cnt = %d\n", buf[:cnt], cnt)
+		fmt.Printf("tcpserver return: %s, cnt = %d\n", buf[:cnt], cnt)
 		time.Sleep(1 * time.Second)
 	}
 }
