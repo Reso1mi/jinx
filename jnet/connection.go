@@ -2,7 +2,9 @@ package jnet
 
 import (
 	"fmt"
-	"jinx/contract"
+	"jinx/config"
+	"jinx/contract/connection"
+	"jinx/contract/router"
 	"net"
 )
 
@@ -13,8 +15,8 @@ type Connection struct {
 	ConnID uint
 	// 链接的状态
 	isClose bool
-	// 和链接绑定的业务方法
-	handle contract.HandleFunc
+	// Router绑定
+	Router router.IRouter
 	// 等待链接退出的channel
 	ExitChan chan bool
 }
@@ -30,17 +32,22 @@ func (c *Connection) Read() {
 	defer c.Stop()
 
 	for {
-		buf := make([]byte, 512)
+		buf := make([]byte, config.ServerConfig.MaxPackSize)
 		cnt, err := c.Conn.Read(buf)
 		if err != nil {
 			fmt.Println("[Jinx] Read from Client error", err)
-			continue
+			break
 		}
-
-		// 调用回调函数
-		if err := c.handle(c.Conn, buf, cnt); err != nil {
-			fmt.Println("[Jinx] handle error!", err)
+		request := &Request{
+			conn: c,
+			data: buf[:cnt],
 		}
+		// 执行路由绑定的方法
+		go func() {
+			c.Router.BeforeHandle(request)
+			c.Router.Handle(request)
+			c.Router.AfterHandle(request)
+		}()
 	}
 }
 
@@ -73,12 +80,12 @@ func (c *Connection) Send(bytes []byte) error {
 	panic("implement me")
 }
 
-func NewConnection(conn *net.TCPConn, connID uint, callback contract.HandleFunc) *Connection {
+func NewConnection(conn *net.TCPConn, connID uint, router router.IRouter) connection.IConnection {
 	c := &Connection{
 		Conn:     conn,
 		ConnID:   connID,
 		isClose:  false,
-		handle:   callback,
+		Router:   router,
 		ExitChan: make(chan bool, 1),
 	}
 	return c

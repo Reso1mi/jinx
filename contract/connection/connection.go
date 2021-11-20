@@ -1,4 +1,4 @@
-package contract
+package connection
 
 import "net"
 

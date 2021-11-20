@@ -2,7 +2,9 @@ package jnet
 
 import (
 	"fmt"
-	"jinx/contract"
+	"jinx/config"
+	"jinx/contract/router"
+	"jinx/contract/server"
 	"net"
 )
 
@@ -11,10 +13,19 @@ type Server struct {
 	IPVersion string
 	IP        string
 	Port      int
+	Router    router.IRouter
+}
+
+func (s *Server) AddRouter(router router.IRouter) {
+	s.Router = router
 }
 
 func (s *Server) Start() {
+	fmt.Printf("[Config] ServerName: %s, IP: %s, Port: %d, IPVersion: %s, MaxConn: %d, MaxPackSize: %d byte\n",
+		config.ServerConfig.Name, config.ServerConfig.Host, config.ServerConfig.Port,
+		config.ServerConfig.IPVersion, config.ServerConfig.MaxConn, config.ServerConfig.MaxPackSize)
 	fmt.Printf("[Jinx Start] Server Listener at IP: %s, Port: %d\n", s.IP, s.Port)
+	var connID uint = 0
 	go func() {
 		// 1.获取tcp的Addr
 		addr, err := net.ResolveTCPAddr(s.IPVersion, fmt.Sprintf("%s:%d", s.IP, s.Port))
@@ -28,26 +39,14 @@ func (s *Server) Start() {
 		}
 		// 3.等待客户端链接
 		for {
-			connect, err := tcpListener.AcceptTCP()
+			tcpConn, err := tcpListener.AcceptTCP()
 			if err != nil {
 				fmt.Println("[Jinx Server] Accept err:", err)
 				continue
 			}
-			go func() {
-				for {
-					buf := make([]byte, 512)
-					cnt, err := connect.Read(buf)
-					if err != nil {
-						fmt.Println("[Jinx Server] read err", err)
-					}
-					fmt.Printf("[Jinx Server] read data:%s \n", buf[:cnt])
-					// 回显
-					if _, err := connect.Write(buf[:cnt]); err != nil {
-						fmt.Println("[Jinx Server] write back err", err)
-						continue
-					}
-				}
-			}()
+			connection := NewConnection(tcpConn, connID, s.Router)
+			connection.Start()
+			connID++
 		}
 	}()
 }
@@ -63,12 +62,16 @@ func (s *Server) Serve() {
 	select {}
 }
 
-func NewServer(name string) contract.IServer {
+func NewServer(path string) server.IServer {
+	if err := config.InitConfig(path); err != nil {
+		panic(err)
+	}
 	s := &Server{
-		Name:      name,
-		IPVersion: "tcp4",
-		IP:        "0.0.0.0",
-		Port:      8999,
+		Name:      config.ServerConfig.Name,
+		IPVersion: config.ServerConfig.IPVersion,
+		IP:        config.ServerConfig.Host,
+		Port:      config.ServerConfig.Port,
+		Router:    nil,
 	}
 	return s
 }

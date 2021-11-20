@@ -1,0 +1,8 @@
+{
+  "ServerName":       "Jinx",
+  "Host":             "0.0.0.0",
+  "IPVersion":        "tcp4",
+  "Port":             8999,
+  "MaxConn":          5,
+  "MaxPackSize":      512
+}
