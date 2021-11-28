@@ -1,4 +1,4 @@
-package jnet
+package jinx
 
 import (
 	"fmt"

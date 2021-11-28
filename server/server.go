@@ -1,26 +1,41 @@
-package jnet
+package server
 
 import (
 	"fmt"
 	"jinx/config"
-	"jinx/contract/router"
-	"jinx/contract/server"
+	"jinx/conn"
+	"jinx/router"
 	"net"
 )
 
-type Server struct {
+type Server interface {
+
+	// Start 启动服务器
+	Start()
+
+	// Stop 停止服务器
+	Stop()
+
+	// Serve 开始服务
+	Serve()
+
+	// AddRouter 给当前服务添加路由处理业务
+	AddRouter(router router.Router)
+}
+
+type server struct {
 	Name      string
 	IPVersion string
 	IP        string
 	Port      int
-	Router    router.IRouter
+	Router    router.Router
 }
 
-func (s *Server) AddRouter(router router.IRouter) {
+func (s *server) AddRouter(router router.Router) {
 	s.Router = router
 }
 
-func (s *Server) Start() {
+func (s *server) Start() {
 	fmt.Printf("[Config] ServerName: %s, IP: %s, Port: %d, IPVersion: %s, MaxConn: %d, MaxPackSize: %d byte\n",
 		config.ServerConfig.Name, config.ServerConfig.Host, config.ServerConfig.Port,
 		config.ServerConfig.IPVersion, config.ServerConfig.MaxConn, config.ServerConfig.MaxPackSize)
@@ -44,29 +59,29 @@ func (s *Server) Start() {
 				fmt.Println("[Jinx Server] Accept err:", err)
 				continue
 			}
-			connection := NewConnection(tcpConn, connID, s.Router)
+			connection := conn.NewConnection(tcpConn, connID, s.Router)
 			connection.Start()
 			connID++
 		}
 	}()
 }
 
-func (s *Server) Stop() {
+func (s *server) Stop() {
 
 }
 
-func (s *Server) Serve() {
+func (s *server) Serve() {
 	s.Start()
 
 	// 阻塞
 	select {}
 }
 
-func NewServer(path string) server.IServer {
+func NewServer(path string) Server {
 	if err := config.InitConfig(path); err != nil {
 		panic(err)
 	}
-	s := &Server{
+	s := &server{
 		Name:      config.ServerConfig.Name,
 		IPVersion: config.ServerConfig.IPVersion,
 		IP:        config.ServerConfig.Host,

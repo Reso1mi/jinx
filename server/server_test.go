@@ -1,16 +1,17 @@
-package jnet
+package server
 
 import (
 	"fmt"
-	"jinx/contract/request"
+	"jinx/request"
+	"jinx/router"
 	"testing"
 )
 
 type TestRouter struct {
-	BaseRouter
+	router.BaseRouter
 }
 
-func (router *TestRouter) Handle(request request.IRequest) {
+func (router *TestRouter) Handle(request request.Request) {
 	data := request.GetReqData()
 	// 回显
 	if _, err := request.GetConnection().GetTCPConnection().Write(data); err != nil {
