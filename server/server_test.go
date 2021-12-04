@@ -2,8 +2,8 @@ package server
 
 import (
 	"fmt"
-	"jinx/request"
-	"jinx/router"
+	"github.com/imlgw/jinx/request"
+	"github.com/imlgw/jinx/router"
 	"testing"
 )
 
@@ -20,8 +20,10 @@ func (router *TestRouter) Handle(request request.Request) {
 }
 
 func TestServerV1(t *testing.T) {
-	s := NewServer("/home/resolmi/GolandProjects/jinx/config.json")
-	// 一个Server绑定一个Router
-	s.AddRouter(&TestRouter{})
-	s.Serve()
+	//s := NewServer("/home/resolmi/GolandProjects/jinx/config.json")
+	//// 一个Server绑定一个Router
+	//s.AddRouter(&TestRouter{})
+	//s.Serve()config
+
+	fmt.Println(1 << 8)
 }

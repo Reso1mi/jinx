@@ -1,7 +1,7 @@
 package request
 
 import (
-	"jinx"
+	"github.com/imlgw/jinx"
 )
 
 type Request interface {

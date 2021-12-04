@@ -1,7 +1,7 @@
 package router
 
 import (
-	"jinx/request"
+	"github.com/imlgw/jinx/request"
 )
 
 type Router interface {

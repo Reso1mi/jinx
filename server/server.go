@@ -2,9 +2,9 @@ package server
 
 import (
 	"fmt"
-	"jinx/config"
-	"jinx/conn"
-	"jinx/router"
+	"github.com/imlgw/jinx/config"
+	"github.com/imlgw/jinx/conn"
+	"github.com/imlgw/jinx/router"
 	"net"
 )
 
@@ -24,31 +24,31 @@ type Server interface {
 }
 
 type server struct {
-	Name      string
-	IPVersion string
-	IP        string
-	Port      int
-	Router    router.Router
+	name      string
+	ipVersion string
+	ip        string
+	port      int
+	router    router.Router
 }
 
 func (s *server) AddRouter(router router.Router) {
-	s.Router = router
+	s.router = router
 }
 
 func (s *server) Start() {
 	fmt.Printf("[Config] ServerName: %s, IP: %s, Port: %d, IPVersion: %s, MaxConn: %d, MaxPackSize: %d byte\n",
 		config.ServerConfig.Name, config.ServerConfig.Host, config.ServerConfig.Port,
 		config.ServerConfig.IPVersion, config.ServerConfig.MaxConn, config.ServerConfig.MaxPackSize)
-	fmt.Printf("[Jinx Start] Server Listener at IP: %s, Port: %d\n", s.IP, s.Port)
+	fmt.Printf("[Jinx Start] Server Listener at IP: %s, Port: %d\n", s.ip, s.port)
 	var connID uint = 0
 	go func() {
 		// 1.获取tcp的Addr
-		addr, err := net.ResolveTCPAddr(s.IPVersion, fmt.Sprintf("%s:%d", s.IP, s.Port))
+		addr, err := net.ResolveTCPAddr(s.ipVersion, fmt.Sprintf("%s:%d", s.ip, s.port))
 		if err != nil {
-			fmt.Println("[Jinx Server] resolve tcp addr error:", err)
+			fmt.Println("[Jinx Server] resolve tcp addr errors:", err)
 		}
 		// 2.监听服务器的地址
-		tcpListener, err := net.ListenTCP(s.IPVersion, addr)
+		tcpListener, err := net.ListenTCP(s.ipVersion, addr)
 		if err != nil {
 			fmt.Println("[Jinx Server] listen err ", err)
 		}
@@ -59,7 +59,7 @@ func (s *server) Start() {
 				fmt.Println("[Jinx Server] Accept err:", err)
 				continue
 			}
-			connection := conn.NewConnection(tcpConn, connID, s.Router)
+			connection := conn.NewConnection(tcpConn, connID, s.router)
 			connection.Start()
 			connID++
 		}
@@ -82,11 +82,11 @@ func NewServer(path string) Server {
 		panic(err)
 	}
 	s := &server{
-		Name:      config.ServerConfig.Name,
-		IPVersion: config.ServerConfig.IPVersion,
-		IP:        config.ServerConfig.Host,
-		Port:      config.ServerConfig.Port,
-		Router:    nil,
+		name:      config.ServerConfig.Name,
+		ipVersion: config.ServerConfig.IPVersion,
+		ip:        config.ServerConfig.Host,
+		port:      config.ServerConfig.Port,
+		router:    nil,
 	}
 	return s
 }
