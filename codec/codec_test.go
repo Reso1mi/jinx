@@ -45,15 +45,17 @@ func TestLengthFieldCodec2WithJust2(t *testing.T) {
 		withLengthFieldLength(2),
 		// 待编码数据包含长度字段
 		withLengthIncludesLengthFieldLength(true),
-		withLengthAdjustment(-2),
 	)
 
-	in := make([]byte, 1<<16-1)
+	in := make([]byte, 1<<16-3)
 	if _, err := rand.Read(in); err != nil {
 		t.Fatal(err)
 	}
 	// | 2 | 65535 |
-	out, _ := codec.Encode(in)
+	out, err := codec.Encode(in)
+	if err != nil {
+		t.Fatalf("encode err: %v", err)
+	}
 	// encode 将长度写入头部，数据部分不变
 	if !bytes.Equal(out[2:], in) {
 		t.Fatalf("encoded data should equal 2 src data")

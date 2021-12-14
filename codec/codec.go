@@ -25,9 +25,9 @@ type LengthFieldCodec struct {
 	initialBytesToStrip int
 	// lengthFieldLength 长度字段长度
 	lengthFieldLength int
-	// lengthAdjustment 修正 lengthFieldLength 长度
+	// lengthAdjustment 修正 lengthFieldLength 指定的消息体长度，和Netty中该字段的定义有点差别
 	lengthAdjustment int
-	// lengthIncludesLengthFieldLength 和 lengthAdjustment 配合使用
+	// lengthIncludesLengthFieldLength 和 lengthFieldLength 配合使用
 	lengthIncludesLengthFieldLength bool
 }
 
@@ -49,7 +49,7 @@ func NewLengthFieldCodec(opts ...Option) *LengthFieldCodec {
 func (lc *LengthFieldCodec) Encode(data []byte) ([]byte, error) {
 	var out []byte
 	// 将content长度写入out
-	length := len(data) + lc.lengthAdjustment
+	length := len(data) - lc.lengthAdjustment
 	if lc.lengthIncludesLengthFieldLength {
 		length += lc.lengthFieldLength
 	}
@@ -123,6 +123,9 @@ func (lc *LengthFieldCodec) Decode(data []byte) ([]byte, error) {
 
 	// adjusted frame length
 	frameLength := length + uint64(lc.lengthAdjustment)
+	if lc.lengthIncludesLengthFieldLength {
+		frameLength -= uint64(lc.lengthFieldLength)
+	}
 
 	frame, err := in.readN(frameLength)
 	if err != nil {
