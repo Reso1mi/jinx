@@ -4,12 +4,14 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/imlgw/jinx/errors"
+	"io"
+	"net"
 )
 
-type Codec interface {
-	Encode(data []byte) []byte
+type ICodec interface {
+	Encode(data []byte) ([]byte, error)
 
-	Decode(data []byte) []byte
+	Decode(conn net.Conn) ([]byte, error)
 }
 
 /*
@@ -25,10 +27,10 @@ type LengthFieldCodec struct {
 	initialBytesToStrip int
 	// lengthFieldLength 长度字段长度
 	lengthFieldLength int
-	// lengthAdjustment 修正 lengthFieldLength 指定的消息体长度，和Netty中该字段的定义有点差别
-	lengthAdjustment int
 	// lengthIncludesLengthFieldLength 和 lengthFieldLength 配合使用
 	lengthIncludesLengthFieldLength bool
+	// lengthAdjustment 修正 lengthFieldLength 指定的消息体长度，和Netty中该字段的定义有点差别，与 lengthIncludesLengthFieldLength 无关
+	lengthAdjustment int
 }
 
 func NewLengthFieldCodec(opts ...Option) *LengthFieldCodec {
@@ -89,50 +91,46 @@ func (lc *LengthFieldCodec) Encode(data []byte) ([]byte, error) {
 	return append(out, data...), nil
 }
 
-type inputByte []byte
-
-func (in *inputByte) readN(n uint64) ([]byte, error) {
-	if n <= 0 || n > uint64(len(*in)) {
-		return nil, errorset.ErrReadLengthInvalid
+func readN(c net.Conn, n int) ([]byte, error) {
+	var buf = make([]byte, n)
+	if _, err := io.ReadFull(c, buf); err != nil {
+		return nil, err
 	}
-	// 读取前n个字节的数据
-	head := (*in)[0:n]
-	// slice指针也同步到n
-	*in = (*in)[n:]
-	return head, nil
+	return buf, nil
 }
 
-func (lc *LengthFieldCodec) Decode(data []byte) ([]byte, error) {
+func (lc *LengthFieldCodec) Decode(c net.Conn) ([]byte, error) {
 	var (
 		err    error
-		in     inputByte = data
 		header []byte
 	)
 	if lc.lengthFieldOffset > 0 {
-		header, err = in.readN(uint64(lc.lengthFieldOffset))
+		header, err = readN(c, lc.lengthFieldOffset)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// 需要修改in指针指向，传入指针
-	lenField, length, err := lc.getUnadjustedFrameLength(&in)
+	lenField, length, err := lc.getUnadjustedFrameLength(c)
 	if err != nil {
 		return nil, err
 	}
 
+	// todo: 超大数据支持. 这里将length转成int, 传输超大payload肯定会丢失数据.
+	//       所以实际上框架目前并不支持超大数据传输(感觉也没有必要，net.Conn一次Read返回的数据长度也是int)
 	// adjusted frame length
-	frameLength := length + uint64(lc.lengthAdjustment)
+	frameLength := int(length) + lc.lengthAdjustment
 	if lc.lengthIncludesLengthFieldLength {
-		frameLength -= uint64(lc.lengthFieldLength)
+		// 减去包头长度，获取调整后的帧长度
+		frameLength -= lc.lengthFieldLength
 	}
 
-	frame, err := in.readN(frameLength)
+	frame, err := readN(c, frameLength)
 	if err != nil {
 		return nil, err
 	}
 
-	msg := make([]byte, uint64(len(header)+len(lenField))+frameLength)
+	msg := make([]byte, len(header)+len(lenField)+frameLength)
 	copy(msg, header)
 	copy(msg[len(header):], lenField)
 	copy(msg[(len(header)+len(lenField)):], frame)
@@ -140,29 +138,29 @@ func (lc *LengthFieldCodec) Decode(data []byte) ([]byte, error) {
 	return msg[lc.initialBytesToStrip:], err
 }
 
-// 获取未调整前原始的数据帧长度， LengthField 中指定的长度
-func (lc *LengthFieldCodec) getUnadjustedFrameLength(in *inputByte) ([]byte, uint64, error) {
+// 获取未调整前原始的数据帧长度( LengthField 中指定的长度)
+func (lc *LengthFieldCodec) getUnadjustedFrameLength(c net.Conn) ([]byte, uint64, error) {
 	switch lc.lengthFieldLength {
 	case 1:
-		lenField, err := in.readN(1)
+		lenField, err := readN(c, 1)
 		if err != nil {
 			return nil, 0, err
 		}
 		return lenField, uint64(lenField[0]), nil
 	case 2:
-		lenField, err := in.readN(2)
+		lenField, err := readN(c, 2)
 		if err != nil {
 			return nil, 0, err
 		}
 		return lenField, uint64(lc.byteOrder.Uint16(lenField)), nil
 	case 4:
-		lenField, err := in.readN(4)
+		lenField, err := readN(c, 4)
 		if err != nil {
 			return nil, 0, err
 		}
 		return lenField, uint64(lc.byteOrder.Uint32(lenField)), nil
 	case 8:
-		lenField, err := in.readN(8)
+		lenField, err := readN(c, 8)
 		if err != nil {
 			return nil, 0, err
 		}

@@ -3,7 +3,7 @@ package conn
 import (
 	"fmt"
 	"github.com/imlgw/jinx"
-	"github.com/imlgw/jinx/config"
+	"github.com/imlgw/jinx/codec"
 	"github.com/imlgw/jinx/request"
 	"github.com/imlgw/jinx/router"
 	"net"
@@ -24,6 +24,8 @@ type connection struct {
 	router router.Router
 	// 等待链接退出的channel
 	exitChan chan bool
+	// 编解码器
+	codec codec.ICodec
 }
 
 func (c *connection) Start() {
@@ -52,12 +54,16 @@ func (c *connection) GetConnID() uint {
 	return c.connID
 }
 
-func (c *connection) RemoteAddr() net.Addr {
-	return c.conn.RemoteAddr()
-}
-
-func (c *connection) Send(bytes []byte) error {
-	panic("implement me")
+func (c *connection) Send(data []byte) error {
+	encoded, err := c.codec.Encode(data)
+	if err != nil {
+		fmt.Println("encode data err", string(data))
+		return err
+	}
+	if _, err := c.conn.Write(encoded); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *connection) Read() {
@@ -66,13 +72,12 @@ func (c *connection) Read() {
 	defer c.Stop()
 
 	for {
-		buf := make([]byte, config.ServerConfig.MaxPackSize)
-		cnt, err := c.conn.Read(buf)
+		buf, err := c.codec.Decode(c.conn)
 		if err != nil {
 			fmt.Println("[Jinx] Read from Client errors", err)
 			break
 		}
-		req := request.NewRequest(c, buf[:cnt])
+		req := request.NewRequest(c, buf)
 		// 执行路由绑定的方法
 		go func() {
 			c.router.BeforeHandle(req)

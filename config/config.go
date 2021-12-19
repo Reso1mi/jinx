@@ -9,12 +9,11 @@ import (
 var ServerConfig *Config
 
 type Config struct {
-	Name        string `json:"ServerName"`
-	Host        string `json:"Host"`
-	IPVersion   string `json:"IPVersion"`
-	Port        int    `json:"Port"`
-	MaxConn     int    `json:"MaxConn"`
-	MaxPackSize int    `json:"MaxPackSize"`
+	Name      string `json:"ServerName"`
+	Host      string `json:"Host"`
+	IPVersion string `json:"IPVersion"`
+	Port      int    `json:"Port"`
+	MaxConn   int    `json:"MaxConn"`
 }
 
 func InitConfig(filename string) error {

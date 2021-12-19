@@ -36,9 +36,9 @@ func (s *server) AddRouter(router router.Router) {
 }
 
 func (s *server) Start() {
-	fmt.Printf("[Config] ServerName: %s, IP: %s, Port: %d, IPVersion: %s, MaxConn: %d, MaxPackSize: %d byte\n",
+	fmt.Printf("[Config] ServerName: %s, IP: %s, Port: %d, IPVersion: %s, MaxConn: %d\n",
 		config.ServerConfig.Name, config.ServerConfig.Host, config.ServerConfig.Port,
-		config.ServerConfig.IPVersion, config.ServerConfig.MaxConn, config.ServerConfig.MaxPackSize)
+		config.ServerConfig.IPVersion, config.ServerConfig.MaxConn)
 	fmt.Printf("[Jinx Start] Server Listener at IP: %s, Port: %d\n", s.ip, s.port)
 	var connID uint = 0
 	go func() {

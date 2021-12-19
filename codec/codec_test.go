@@ -2,11 +2,14 @@ package codec
 
 import (
 	"bytes"
+	"fmt"
 	"math/rand"
+	"net"
 	"testing"
+	"time"
 )
 
-func TestLengthFieldCodec2(t *testing.T) {
+func TestLengthFieldCodec2_Encode(t *testing.T) {
 	codec := NewLengthFieldCodec(
 		withLengthFieldLength(2),
 	)
@@ -29,18 +32,9 @@ func TestLengthFieldCodec2(t *testing.T) {
 	if !bytes.Equal(out[2:], in) {
 		t.Fatalf("encoded data should equal 2 src data")
 	}
-
-	// 解码数据
-	res, err := codec.Decode(out)
-	if err != nil {
-		t.Fatalf("decocde data err: %v", err)
-	}
-	if !bytes.Equal(res, out) {
-		t.Fatalf("decode data[%s] shuould equal 2 src data[%s]", out, res)
-	}
 }
 
-func TestLengthFieldCodec2WithJust2(t *testing.T) {
+func TestLengthFieldCodec2WithJust2_Encode(t *testing.T) {
 	codec := NewLengthFieldCodec(
 		withLengthFieldLength(2),
 		// 待编码数据包含长度字段
@@ -60,13 +54,50 @@ func TestLengthFieldCodec2WithJust2(t *testing.T) {
 	if !bytes.Equal(out[2:], in) {
 		t.Fatalf("encoded data should equal 2 src data")
 	}
+}
 
-	// 解码数据
-	res, err := codec.Decode(out)
-	if err != nil {
-		t.Fatalf("decocde data err: %v", err)
-	}
-	if !bytes.Equal(res, out) {
-		t.Fatalf("decode data[%s] shuould equal 2 src data[%s]", out, res)
-	}
+func TestNewLengthFieldCodec(t *testing.T) {
+	codec := NewLengthFieldCodec(
+		withLengthFieldLength(2),
+		withLengthIncludesLengthFieldLength(true),
+	)
+
+	go func() {
+		addr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:8999")
+		tcpListener, _ := net.ListenTCP("tcp", addr)
+		for {
+			tcpConn, _ := tcpListener.AcceptTCP()
+			for {
+				decoded, err := codec.Decode(tcpConn)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+				fmt.Println("server receive:", string(decoded[2:]))
+			}
+		}
+	}()
+	time.Sleep(3 * time.Second)
+	go func() {
+		conn, err := net.Dial("tcp", "127.0.0.1:8999")
+		if err != nil {
+			fmt.Println("link err", err)
+			return
+		}
+
+		sendData := make([]byte, 0)
+
+		imlgwSite := "imlgw.top"
+		encoded, _ := codec.Encode([]byte(imlgwSite))
+
+		for i := 0; i < 20; i++ {
+			sendData = append(sendData, encoded...)
+		}
+
+		write, err := conn.Write(sendData)
+		fmt.Println("client send:", sendData)
+		fmt.Println(write)
+	}()
+
+	select {}
 }
