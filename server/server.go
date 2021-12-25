@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"github.com/imlgw/jinx/codec"
 	"github.com/imlgw/jinx/config"
 	"github.com/imlgw/jinx/conn"
 	"github.com/imlgw/jinx/router"
@@ -29,6 +30,7 @@ type server struct {
 	ip        string
 	port      int
 	router    router.Router
+	codec     codec.ICodec
 }
 
 func (s *server) AddRouter(router router.Router) {
@@ -59,7 +61,7 @@ func (s *server) Start() {
 				fmt.Println("[Jinx Server] Accept err:", err)
 				continue
 			}
-			connection := conn.NewConnection(tcpConn, connID, s.router)
+			connection := conn.NewConnection(tcpConn, connID, s.router, s.codec)
 			connection.Start()
 			connID++
 		}
@@ -87,6 +89,7 @@ func NewServer(path string) Server {
 		ip:        config.ServerConfig.Host,
 		port:      config.ServerConfig.Port,
 		router:    nil,
+		codec:     codec.NewLengthFieldCodec(),
 	}
 	return s
 }

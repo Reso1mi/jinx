@@ -15,4 +15,9 @@ var (
 	ErrTooLessLength = errors.New("adjusted frame length is less than zero")
 	// ErrReadLengthInvalid 读取长度异常
 	ErrReadLengthInvalid = errors.New("read length is invalid")
+
+	// ================================================= connect errors ===============================================.
+
+	// ErrConnectionClosed 读取长度异常
+	ErrConnectionClosed = errors.New("read length is invalid")
 )

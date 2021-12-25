@@ -11,7 +11,7 @@ import (
 
 func TestLengthFieldCodec2_Encode(t *testing.T) {
 	codec := NewLengthFieldCodec(
-		withLengthFieldLength(2),
+		WithLengthFieldLength(2),
 	)
 
 	in := make([]byte, 1<<16-1)
@@ -36,9 +36,9 @@ func TestLengthFieldCodec2_Encode(t *testing.T) {
 
 func TestLengthFieldCodec2WithJust2_Encode(t *testing.T) {
 	codec := NewLengthFieldCodec(
-		withLengthFieldLength(2),
+		WithLengthFieldLength(2),
 		// 待编码数据包含长度字段
-		withLengthIncludesLengthFieldLength(true),
+		WithLengthIncludesLengthFieldLength(true),
 	)
 
 	in := make([]byte, 1<<16-3)
@@ -58,8 +58,8 @@ func TestLengthFieldCodec2WithJust2_Encode(t *testing.T) {
 
 func TestNewLengthFieldCodec(t *testing.T) {
 	codec := NewLengthFieldCodec(
-		withLengthFieldLength(2),
-		withLengthIncludesLengthFieldLength(true),
+		WithLengthFieldLength(2),
+		WithLengthIncludesLengthFieldLength(true),
 	)
 
 	go func() {

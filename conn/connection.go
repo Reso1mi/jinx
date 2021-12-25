@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/imlgw/jinx"
 	"github.com/imlgw/jinx/codec"
+	errorset "github.com/imlgw/jinx/errors"
 	"github.com/imlgw/jinx/request"
 	"github.com/imlgw/jinx/router"
 	"net"
@@ -55,12 +56,17 @@ func (c *connection) GetConnID() uint {
 }
 
 func (c *connection) Send(data []byte) error {
+	if c.isClose {
+		return errorset.ErrConnectionClosed
+	}
+	// encode data
 	encoded, err := c.codec.Encode(data)
 	if err != nil {
 		fmt.Println("encode data err", string(data))
 		return err
 	}
 	if _, err := c.conn.Write(encoded); err != nil {
+		fmt.Println("conn write msg err", err)
 		return err
 	}
 	return nil
@@ -87,13 +93,14 @@ func (c *connection) Read() {
 	}
 }
 
-func NewConnection(conn *net.TCPConn, connID uint, router router.Router) jinx.Connection {
+func NewConnection(conn *net.TCPConn, connID uint, router router.Router, codec codec.ICodec) jinx.Connection {
 	c := &connection{
 		conn:     conn,
 		connID:   connID,
 		isClose:  false,
 		router:   router,
 		exitChan: make(chan bool, 1),
+		codec:    codec,
 	}
 	return c
 }

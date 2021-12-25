@@ -37,7 +37,7 @@ func NewLengthFieldCodec(opts ...Option) *LengthFieldCodec {
 	codec := &LengthFieldCodec{
 		byteOrder:                       binary.LittleEndian,
 		lengthFieldOffset:               0,
-		initialBytesToStrip:             0,
+		initialBytesToStrip:             2,
 		lengthFieldLength:               2,
 		lengthAdjustment:                0,
 		lengthIncludesLengthFieldLength: false,
@@ -93,6 +93,7 @@ func (lc *LengthFieldCodec) Encode(data []byte) ([]byte, error) {
 
 func readN(c net.Conn, n int) ([]byte, error) {
 	var buf = make([]byte, n)
+	//c.Read()可能会超时，可能是隐藏的问题
 	if _, err := io.ReadFull(c, buf); err != nil {
 		return nil, err
 	}
@@ -184,7 +185,7 @@ func (opt byteOrderOpt) apply(lc *LengthFieldCodec) {
 	lc.byteOrder = opt.order
 }
 
-func withByteOrder(order binary.ByteOrder) Option {
+func WithByteOrder(order binary.ByteOrder) Option {
 	return byteOrderOpt{order: order}
 }
 
@@ -194,7 +195,7 @@ func (opt lengthFieldOffsetOpt) apply(lc *LengthFieldCodec) {
 	lc.lengthFieldOffset = int(opt)
 }
 
-func withLengthFieldOffset(offset int) Option {
+func WithLengthFieldOffset(offset int) Option {
 	return lengthFieldOffsetOpt(offset)
 }
 
@@ -204,7 +205,7 @@ func (opt initialBytesToStripOpt) apply(lc *LengthFieldCodec) {
 	lc.initialBytesToStrip = int(opt)
 }
 
-func withInitialBytesToStrip(strip int) Option {
+func WithInitialBytesToStrip(strip int) Option {
 	return initialBytesToStripOpt(strip)
 }
 
@@ -214,7 +215,7 @@ func (opt lengthFieldLengthOpt) apply(lc *LengthFieldCodec) {
 	lc.lengthFieldLength = int(opt)
 }
 
-func withLengthFieldLength(length int) Option {
+func WithLengthFieldLength(length int) Option {
 	return lengthFieldLengthOpt(length)
 }
 
@@ -224,7 +225,7 @@ func (opt lengthAdjustmentOpt) apply(lc *LengthFieldCodec) {
 	lc.lengthAdjustment = int(opt)
 }
 
-func withLengthAdjustment(length int) Option {
+func WithLengthAdjustment(length int) Option {
 	return lengthAdjustmentOpt(length)
 }
 
@@ -234,6 +235,6 @@ func (opt lengthIncludesLengthFieldLengthOpt) apply(lc *LengthFieldCodec) {
 	lc.lengthIncludesLengthFieldLength = bool(opt)
 }
 
-func withLengthIncludesLengthFieldLength(b bool) Option {
+func WithLengthIncludesLengthFieldLength(b bool) Option {
 	return lengthIncludesLengthFieldLengthOpt(b)
 }

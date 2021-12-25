@@ -2,6 +2,7 @@ package jinx
 
 import (
 	"fmt"
+	"github.com/imlgw/jinx/codec"
 	"net"
 	"testing"
 	"time"
@@ -16,18 +17,22 @@ func TestClient(t *testing.T) {
 		return
 	}
 	for {
+		lengthFieldCodec := codec.NewLengthFieldCodec(
+			codec.WithLengthFieldLength(2),
+		)
+		data := []byte("imlgw.top")
+		encoded, err := lengthFieldCodec.Encode(data)
 		// 2.调用write写数据
-		if _, err := conn.Write([]byte("imlgw.top")); err != nil {
+		if _, err := conn.Write(encoded); err != nil {
 			fmt.Println("write err", err)
 			return
 		}
-		buf := make([]byte, 512)
 		// 3.读取服务端返回的内容
-		cnt, err := conn.Read(buf)
+		res, err := lengthFieldCodec.Decode(conn)
 		if err != nil {
 			fmt.Println("read buf err", err)
 		}
-		fmt.Printf("tcpserver return: %s, cnt = %d\n", buf[:cnt], cnt)
+		fmt.Printf("tcpserver return: %s\n", res)
 		time.Sleep(1 * time.Second)
 	}
 }
