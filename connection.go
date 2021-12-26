@@ -1,14 +1,24 @@
-package conn
+package jinx
 
 import (
 	"fmt"
-	"github.com/imlgw/jinx"
 	"github.com/imlgw/jinx/codec"
 	errorset "github.com/imlgw/jinx/errors"
-	"github.com/imlgw/jinx/request"
-	"github.com/imlgw/jinx/router"
 	"net"
 )
+
+type Connection interface {
+	// Start 启动链接
+	Start()
+	// Stop 停止链接
+	Stop()
+	// GetTCPConnection 获取当前链接的socket conn
+	GetTCPConnection() *net.TCPConn
+	// GetConnID 获取当前链接的ID
+	GetConnID() uint
+	// Send 发送数据
+	Send([]byte) error
+}
 
 // HandleFunc 处理链接业务的方法
 type HandleFunc func(*net.TCPConn, []byte, int) error
@@ -22,7 +32,7 @@ type connection struct {
 	// 链接的状态
 	isClose bool
 	// Router绑定
-	router router.Router
+	router Router
 	// 等待链接退出的channel
 	exitChan chan bool
 	// 编解码器
@@ -83,7 +93,7 @@ func (c *connection) Read() {
 			fmt.Println("[Jinx] Read from Client errors", err)
 			break
 		}
-		req := request.NewRequest(c, buf)
+		req := NewRequest(c, buf)
 		// 执行路由绑定的方法
 		go func() {
 			c.router.BeforeHandle(req)
@@ -93,7 +103,7 @@ func (c *connection) Read() {
 	}
 }
 
-func NewConnection(conn *net.TCPConn, connID uint, router router.Router, codec codec.ICodec) jinx.Connection {
+func NewConnection(conn *net.TCPConn, connID uint, router Router, codec codec.ICodec) Connection {
 	c := &connection{
 		conn:     conn,
 		connID:   connID,

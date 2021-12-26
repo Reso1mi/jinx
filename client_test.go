@@ -1,6 +1,7 @@
 package jinx
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/imlgw/jinx/codec"
 	"net"
@@ -18,7 +19,12 @@ func TestClient(t *testing.T) {
 	}
 	for {
 		lengthFieldCodec := codec.NewLengthFieldCodec(
-			codec.WithLengthFieldLength(2),
+			binary.LittleEndian,
+			0,
+			2,
+			0,
+			2,
+			false,
 		)
 		data := []byte("imlgw.top")
 		encoded, err := lengthFieldCodec.Encode(data)

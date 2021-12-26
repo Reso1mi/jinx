@@ -2,6 +2,7 @@ package codec
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"net"
@@ -11,7 +12,12 @@ import (
 
 func TestLengthFieldCodec2_Encode(t *testing.T) {
 	codec := NewLengthFieldCodec(
-		WithLengthFieldLength(2),
+		binary.LittleEndian,
+		0,
+		2,
+		0,
+		2,
+		false,
 	)
 
 	in := make([]byte, 1<<16-1)
@@ -36,9 +42,12 @@ func TestLengthFieldCodec2_Encode(t *testing.T) {
 
 func TestLengthFieldCodec2WithJust2_Encode(t *testing.T) {
 	codec := NewLengthFieldCodec(
-		WithLengthFieldLength(2),
-		// 待编码数据包含长度字段
-		WithLengthIncludesLengthFieldLength(true),
+		binary.LittleEndian,
+		0,
+		2,
+		0,
+		2,
+		true,
 	)
 
 	in := make([]byte, 1<<16-3)
@@ -58,8 +67,12 @@ func TestLengthFieldCodec2WithJust2_Encode(t *testing.T) {
 
 func TestNewLengthFieldCodec(t *testing.T) {
 	codec := NewLengthFieldCodec(
-		WithLengthFieldLength(2),
-		WithLengthIncludesLengthFieldLength(true),
+		binary.LittleEndian,
+		0,
+		2,
+		-2,
+		2,
+		true,
 	)
 
 	go func() {
@@ -73,7 +86,7 @@ func TestNewLengthFieldCodec(t *testing.T) {
 					fmt.Println(err)
 					return
 				}
-				fmt.Println("server receive:", string(decoded[2:]))
+				fmt.Println("server receive:", string(decoded))
 			}
 		}
 	}()

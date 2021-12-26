@@ -1,11 +1,9 @@
-package server
+package jinx
 
 import (
 	"fmt"
 	"github.com/imlgw/jinx/codec"
 	"github.com/imlgw/jinx/config"
-	"github.com/imlgw/jinx/conn"
-	"github.com/imlgw/jinx/router"
 	"net"
 )
 
@@ -19,9 +17,6 @@ type Server interface {
 
 	// Serve 开始服务
 	Serve()
-
-	// AddRouter 给当前服务添加路由处理业务
-	AddRouter(router router.Router)
 }
 
 type server struct {
@@ -29,12 +24,7 @@ type server struct {
 	ipVersion string
 	ip        string
 	port      int
-	router    router.Router
-	codec     codec.ICodec
-}
-
-func (s *server) AddRouter(router router.Router) {
-	s.router = router
+	opts      *Options
 }
 
 func (s *server) Start() {
@@ -61,7 +51,7 @@ func (s *server) Start() {
 				fmt.Println("[Jinx Server] Accept err:", err)
 				continue
 			}
-			connection := conn.NewConnection(tcpConn, connID, s.router, s.codec)
+			connection := NewConnection(tcpConn, connID, s.opts.Router, s.opts.Codec)
 			connection.Start()
 			connID++
 		}
@@ -79,17 +69,20 @@ func (s *server) Serve() {
 	select {}
 }
 
-func NewServer(path string) Server {
+func NewServer(path string, opts ...Option) Server {
+	options := LoadOptions(opts...)
 	if err := config.InitConfig(path); err != nil {
 		panic(err)
+	}
+	if options.Codec == nil {
+		options.Codec = codec.NewDefaultLengthFieldCodec()
 	}
 	s := &server{
 		name:      config.ServerConfig.Name,
 		ipVersion: config.ServerConfig.IPVersion,
 		ip:        config.ServerConfig.Host,
 		port:      config.ServerConfig.Port,
-		router:    nil,
-		codec:     codec.NewLengthFieldCodec(),
+		opts:      options,
 	}
 	return s
 }

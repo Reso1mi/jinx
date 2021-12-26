@@ -19,31 +19,48 @@ type ICodec interface {
 */
 
 type LengthFieldCodec struct {
-	// byteOrder
+	//================================================== 公共参数 =======================================================
+	// byteOrder 大小端
 	byteOrder binary.ByteOrder
-	// lengthFieldOffset 解码时长度字段偏移量
-	lengthFieldOffset int
-	// initialBytesToStrip 解码时跳过字节数
-	initialBytesToStrip int
 	// lengthFieldLength 长度字段长度
 	lengthFieldLength int
-	// lengthIncludesLengthFieldLength 和 lengthFieldLength 配合使用
-	lengthIncludesLengthFieldLength bool
-	// lengthAdjustment 修正 lengthFieldLength 指定的消息体长度，和Netty中该字段的定义有点差别，与 lengthIncludesLengthFieldLength 无关
-	lengthAdjustment int
+
+	//================================================== 编码参数 =======================================================
+	// encodeLengthIncludesLengthFieldLength 长度是否是否包含头
+	encodeLengthIncludesLengthFieldLength bool
+
+	//================================================== 解码参数 =======================================================
+	// decodeInitialBytesToStrip 解码时跳过字节数
+	decodeInitialBytesToStrip int
+	// decodeLengthAdjustment 修正 lengthFieldLength 指定的消息体长度。
+	// netty在4.0之后的版本中编码时也加入了该参数，网上没找到原因，不清楚是什么场景下编码需要这个参数，这里就暂时去掉
+	decodeLengthAdjustment int
+	// lengthFieldOffset 解码时长度字段偏移，数据包头几个字节可能并不是数据长度
+	lengthFieldOffset int
 }
 
-func NewLengthFieldCodec(opts ...Option) *LengthFieldCodec {
+func NewDefaultLengthFieldCodec() *LengthFieldCodec {
 	codec := &LengthFieldCodec{
-		byteOrder:                       binary.LittleEndian,
-		lengthFieldOffset:               0,
-		initialBytesToStrip:             2,
-		lengthFieldLength:               2,
-		lengthAdjustment:                0,
-		lengthIncludesLengthFieldLength: false,
+		byteOrder:                             binary.LittleEndian,
+		lengthFieldOffset:                     0,
+		lengthFieldLength:                     2,
+		decodeLengthAdjustment:                0,
+		decodeInitialBytesToStrip:             2,
+		encodeLengthIncludesLengthFieldLength: false,
 	}
-	for _, opt := range opts {
-		opt.apply(codec)
+	return codec
+}
+
+func NewLengthFieldCodec(order binary.ByteOrder, lengthFieldOffset int, lengthFieldLength int,
+	decodeLengthAdjustment int, decodeInitialBytesToStrip int, encodeLengthIncludesLengthFieldLength bool,
+) *LengthFieldCodec {
+	codec := &LengthFieldCodec{
+		byteOrder:                             order,
+		lengthFieldOffset:                     lengthFieldOffset,
+		lengthFieldLength:                     lengthFieldLength,
+		decodeLengthAdjustment:                decodeLengthAdjustment,
+		decodeInitialBytesToStrip:             decodeInitialBytesToStrip,
+		encodeLengthIncludesLengthFieldLength: encodeLengthIncludesLengthFieldLength,
 	}
 	return codec
 }
@@ -51,8 +68,8 @@ func NewLengthFieldCodec(opts ...Option) *LengthFieldCodec {
 func (lc *LengthFieldCodec) Encode(data []byte) ([]byte, error) {
 	var out []byte
 	// 将content长度写入out
-	length := len(data) - lc.lengthAdjustment
-	if lc.lengthIncludesLengthFieldLength {
+	length := len(data)
+	if lc.encodeLengthIncludesLengthFieldLength {
 		length += lc.lengthFieldLength
 	}
 
@@ -120,11 +137,7 @@ func (lc *LengthFieldCodec) Decode(c net.Conn) ([]byte, error) {
 	// todo: 超大数据支持. 这里将length转成int, 传输超大payload肯定会丢失数据.
 	//       所以实际上框架目前并不支持超大数据传输(感觉也没有必要，net.Conn一次Read返回的数据长度也是int)
 	// adjusted frame length
-	frameLength := int(length) + lc.lengthAdjustment
-	if lc.lengthIncludesLengthFieldLength {
-		// 减去包头长度，获取调整后的帧长度
-		frameLength -= lc.lengthFieldLength
-	}
+	frameLength := int(length) + lc.decodeLengthAdjustment
 
 	frame, err := readN(c, frameLength)
 	if err != nil {
@@ -136,7 +149,7 @@ func (lc *LengthFieldCodec) Decode(c net.Conn) ([]byte, error) {
 	copy(msg[len(header):], lenField)
 	copy(msg[(len(header)+len(lenField)):], frame)
 
-	return msg[lc.initialBytesToStrip:], err
+	return msg[lc.decodeInitialBytesToStrip:], err
 }
 
 // 获取未调整前原始的数据帧长度( LengthField 中指定的长度)
@@ -169,72 +182,4 @@ func (lc *LengthFieldCodec) getUnadjustedFrameLength(c net.Conn) ([]byte, uint64
 	default:
 		return nil, 0, errorset.ErrUnsupportedLength
 	}
-}
-
-// Option 功能选项
-// ×××××××××××××××××××××××××××××××××××××××**************
-type Option interface {
-	apply(*LengthFieldCodec)
-}
-
-type byteOrderOpt struct {
-	order binary.ByteOrder
-}
-
-func (opt byteOrderOpt) apply(lc *LengthFieldCodec) {
-	lc.byteOrder = opt.order
-}
-
-func WithByteOrder(order binary.ByteOrder) Option {
-	return byteOrderOpt{order: order}
-}
-
-type lengthFieldOffsetOpt int
-
-func (opt lengthFieldOffsetOpt) apply(lc *LengthFieldCodec) {
-	lc.lengthFieldOffset = int(opt)
-}
-
-func WithLengthFieldOffset(offset int) Option {
-	return lengthFieldOffsetOpt(offset)
-}
-
-type initialBytesToStripOpt int
-
-func (opt initialBytesToStripOpt) apply(lc *LengthFieldCodec) {
-	lc.initialBytesToStrip = int(opt)
-}
-
-func WithInitialBytesToStrip(strip int) Option {
-	return initialBytesToStripOpt(strip)
-}
-
-type lengthFieldLengthOpt int
-
-func (opt lengthFieldLengthOpt) apply(lc *LengthFieldCodec) {
-	lc.lengthFieldLength = int(opt)
-}
-
-func WithLengthFieldLength(length int) Option {
-	return lengthFieldLengthOpt(length)
-}
-
-type lengthAdjustmentOpt int
-
-func (opt lengthAdjustmentOpt) apply(lc *LengthFieldCodec) {
-	lc.lengthAdjustment = int(opt)
-}
-
-func WithLengthAdjustment(length int) Option {
-	return lengthAdjustmentOpt(length)
-}
-
-type lengthIncludesLengthFieldLengthOpt bool
-
-func (opt lengthIncludesLengthFieldLengthOpt) apply(lc *LengthFieldCodec) {
-	lc.lengthIncludesLengthFieldLength = bool(opt)
-}
-
-func WithLengthIncludesLengthFieldLength(b bool) Option {
-	return lengthIncludesLengthFieldLengthOpt(b)
 }
