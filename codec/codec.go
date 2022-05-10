@@ -19,17 +19,17 @@ type ICodec interface {
 */
 
 type LengthFieldCodec struct {
-	//================================================== 公共参数 =======================================================
+	// ================================================== 公共参数 =======================================================
 	// byteOrder 大小端
 	byteOrder binary.ByteOrder
 	// lengthFieldLength 长度字段长度
 	lengthFieldLength int
 
-	//================================================== 编码参数 =======================================================
+	// ================================================== 编码参数 =======================================================
 	// encodeLengthIncludesLengthFieldLength 长度是否是否包含头
 	encodeLengthIncludesLengthFieldLength bool
 
-	//================================================== 解码参数 =======================================================
+	// ================================================== 解码参数 =======================================================
 	// decodeInitialBytesToStrip 解码时跳过字节数
 	decodeInitialBytesToStrip int
 	// decodeLengthAdjustment 修正 lengthFieldLength 指定的消息体长度。
@@ -74,7 +74,7 @@ func (lc *LengthFieldCodec) Encode(data []byte) ([]byte, error) {
 	}
 
 	if length < 0 {
-		return nil, errorset.ErrTooLessLength
+		return nil, errors.ErrTooLessLength
 	}
 
 	switch lc.lengthFieldLength {
@@ -101,7 +101,7 @@ func (lc *LengthFieldCodec) Encode(data []byte) ([]byte, error) {
 		}
 		lc.byteOrder.PutUint64(out, uint64(length))
 	default:
-		return nil, errorset.ErrUnsupportedLength
+		return nil, errors.ErrUnsupportedLength
 	}
 
 	// 2. 将数据写入out
@@ -110,7 +110,7 @@ func (lc *LengthFieldCodec) Encode(data []byte) ([]byte, error) {
 
 func readN(c net.Conn, n int) ([]byte, error) {
 	var buf = make([]byte, n)
-	//c.Read()可能会超时，可能是隐藏的问题
+	// c.Read()可能会超时，可能是隐藏的问题
 	if _, err := io.ReadFull(c, buf); err != nil {
 		return nil, err
 	}
@@ -180,6 +180,6 @@ func (lc *LengthFieldCodec) getUnadjustedFrameLength(c net.Conn) ([]byte, uint64
 		}
 		return lenField, lc.byteOrder.Uint64(lenField), nil
 	default:
-		return nil, 0, errorset.ErrUnsupportedLength
+		return nil, 0, errors.ErrUnsupportedLength
 	}
 }

@@ -1,4 +1,4 @@
-package errorset
+package errors
 
 import "errors"
 
@@ -20,4 +20,7 @@ var (
 
 	// ErrConnectionClosed 读取长度异常
 	ErrConnectionClosed = errors.New("read length is invalid")
+
+	// ErrAcceptSocket 连接异常
+	ErrAcceptSocket = errors.New("accept error")
 )

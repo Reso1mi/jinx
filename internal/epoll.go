@@ -1,6 +1,9 @@
 package internal
 
-import "golang.org/x/sys/unix"
+import (
+	"golang.org/x/sys/unix"
+	"log"
+)
 
 // Epoll epoll 封装
 type Epoll struct {
@@ -10,10 +13,15 @@ type Epoll struct {
 	// 参考：https://zhuanlan.zhihu.com/p/393748176
 	// eventfd，通过eventfd()调用产生用于事件通知的fd，只监听读事件，这里用来内部手动唤醒eventloop处理任务
 	eventfd int
+	// eventfd 对应文件内容buf，避免重复开辟空间
+	eventfdBuf []byte
+
+	taskQueue []func(interface{}) error
 }
 
-type EventType uint32
+type EventType = uint32
 
+// CreateEpoll 创建Epoll实例
 func CreateEpoll() (*Epoll, error) {
 	epoll := new(Epoll)
 	// 创建epoll实例，设置EPOLL_CLOEXEC标识，避免泄露
@@ -25,27 +33,66 @@ func CreateEpoll() (*Epoll, error) {
 	epoll.epfd = fd
 
 	// https://evian-zhang.github.io/introduction-to-linux-x86_64-syscall/src/filesystem/eventfd-eventfd2.html
-	// 创建eventfd，用于程序内部唤醒eventloop
+	// 创建eventfd，用于程序内部唤醒eventloop。设置为非阻塞，计数器为0返回EAGAIN
 	epoll.eventfd, err = unix.Eventfd(0, unix.EFD_NONBLOCK|unix.EFD_CLOEXEC)
 	if err != nil {
 		_ = epoll.Close()
 		return nil, err
 	}
 
-	// 给 eventfd 注册读事件到epfd上  参考：https://zhuanlan.zhihu.com/p/393748176
+	// 注册 eventfd 读事件到epfd上  参考：https://zhuanlan.zhihu.com/p/393748176
 	// eventfd 底层实现是一个8字节的计数器，计数不为0就代表可读，往eventfd写入的时候累加计数，read后清零，所以eventfd是一直可写的
 	// 我们这里是为了在程序内主动唤醒eventloop，所以我们只需要监听读事件即可
 	if err := epoll.RegRead(epoll.eventfd); err != nil {
 		_ = epoll.Close()
 		return nil, err
 	}
-
+	epoll.eventfdBuf = make([]byte, 8)
 	return epoll, nil
 }
 
 // Polling 阻塞在EpollWait，等待事件就绪后调用callback
-func (ep *Epoll) Polling(callback func(fd int, eventType EventType)) {
+func (ep *Epoll) Polling(callback func(fd int, eventType EventType) error) error {
+	events := make([]unix.EpollEvent, 1024)
+	for {
+		// 阻塞直到有事件就绪
+		numPolled, err := unix.EpollWait(ep.epfd, events, -1)
+		// TODO: unix.EAGAIN
+		if err != nil {
+			continue
+		}
 
+		var runTask bool
+
+		for i := 0; i < numPolled; i++ {
+			ev := events[i]
+			if pfd := int(ev.Fd); pfd != ep.eventfd { // io事件就绪，非内部任务
+				if err := callback(pfd, ev.Events); err != nil {
+					log.Printf("callback error, %v \n", err)
+					continue
+				}
+			} else { // WakeUp 主动唤醒，执行内部任务，比如定时任务之类
+				// 将 eventfd 中的数据读取出来清零，解除读就绪事件，避免 epoll 被重复唤醒，早期 evio 有这个bug
+				_, _ = unix.Read(ep.eventfd, ep.eventfdBuf)
+				// log.Printf("eventfd buf : %v \n", ep.eventfdBuf)
+				runTask = true
+			}
+		}
+
+		if runTask {
+			log.Println("run all task !")
+		}
+		return nil
+	}
+}
+
+// WakeUp 主动唤醒eventloop，执行任务（非IO事件任务）
+func (ep *Epoll) WakeUp() error {
+	// 向 eventfd 写入数据，触发可读事件，唤醒 EpollWait（写入必须是一个8字节数）
+	if _, err := unix.Write(ep.eventfd, []byte{0, 0, 0, 0, 0, 0, 0, 1}); err != nil {
+		return err
+	}
+	return nil
 }
 
 const (
@@ -100,6 +147,11 @@ func (ep *Epoll) ModWrite(fd int) error {
 		Events: writeEvent,
 		Fd:     int32(fd),
 	})
+}
+
+// Delete 在 epoll 上删除 fd （不再监听）
+func (ep *Epoll) Delete(fd int) error {
+	return unix.EpollCtl(ep.epfd, unix.EPOLL_CTL_DEL, fd, nil)
 }
 
 func (ep *Epoll) Close() error {

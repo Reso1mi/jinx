@@ -20,9 +20,4 @@ func (router *TestRouter) Handle(request Request) {
 }
 
 func TestJinxServer(t *testing.T) {
-
-	s := NewServer("/home/resolmi/GolandProjects/jinx/config.json",
-		WithRouter(&TestRouter{}),
-	)
-	s.Serve()
 }
