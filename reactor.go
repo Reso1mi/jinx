@@ -11,13 +11,28 @@ import (
 
 type Reactor interface {
 	HandleEvent(fd int, eventType internal.EventType) error
+	Run()
 }
 
-type Acceptor struct {
+type listener struct {
+	addr net.Addr
+	ln   net.Listener
+	lnfd int
 	loop *eventloop
 }
 
-func (a *Acceptor) HandleEvent(fd int, _ internal.EventType) error {
+func NewListener(fd int, addr net.Addr, ln net.Listener, loop *eventloop) *listener {
+	return &listener{lnfd: fd, addr: addr, ln: ln, loop: loop}
+}
+
+func (l *listener) Run() {
+	if err := l.loop.Loop(); err != nil {
+		log.Printf("loop error, %v \n", err)
+		return
+	}
+}
+
+func (l *listener) HandleEvent(fd int, _ internal.EventType) error {
 	// 建立新链接
 	connfd, sa, err := unix.Accept(fd)
 	if err != nil {
@@ -41,7 +56,7 @@ func (a *Acceptor) HandleEvent(fd int, _ internal.EventType) error {
 		return err
 	}
 
-	handler := newHandler(connfd, sa, addr, nextLoop)
+	handler := NewHandler(connfd, sa, addr, nextLoop)
 	// 将 handler 绑定到该 loop 对应 fd 的回调上
 	nextLoop.reactor[connfd] = handler
 	atomic.AddUint64(&nextLoop.conncnt, 1)
@@ -69,12 +84,19 @@ type Handler struct {
 	localAddr  net.Addr
 }
 
-func newHandler(fd int, sa unix.Sockaddr, remoteAddr net.Addr, loop *eventloop) *Handler {
+func NewHandler(fd int, sa unix.Sockaddr, remoteAddr net.Addr, loop *eventloop) *Handler {
 	return &Handler{
 		fd:         fd,
 		sa:         sa,
 		remoteAddr: remoteAddr,
 		loop:       loop,
+	}
+}
+
+func (h *Handler) Run() {
+	if err := h.loop.Loop(); err != nil {
+		log.Printf("loop error, %v \n", err)
+		return
 	}
 }
 

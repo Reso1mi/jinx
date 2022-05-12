@@ -22,6 +22,9 @@ type Options struct {
 
 	// both server & client options
 	Codec codec.ICodec
+
+	// 负载均衡配置
+	Lb LoadBalance
 }
 
 func WithRouter(r Router) Option {
@@ -33,5 +36,11 @@ func WithRouter(r Router) Option {
 func WithCodec(codec codec.ICodec) Option {
 	return func(opts *Options) {
 		opts.Codec = codec
+	}
+}
+
+func WithLb(lb LoadBalance) Option {
+	return func(opts *Options) {
+		opts.Lb = lb
 	}
 }

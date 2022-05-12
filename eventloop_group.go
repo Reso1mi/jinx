@@ -1,18 +1,22 @@
 package jinx
 
-import "net"
+import (
+	"math/rand"
+	"net"
+	"time"
+)
 
 var loopGroup EventLoopGroup
 
 type EventLoopGroup interface {
 	Next(addr net.Addr) *eventloop
-	Register(e *eventloop) error
+	Register(e *eventloop)
 }
 
 type eventLoopGroup struct {
 	loops       []*eventloop
 	loadBalance interface {
-		next(loops []*eventloop) *eventloop
+		next(loops []*eventloop, addr net.Addr) *eventloop
 	}
 }
 
@@ -30,11 +34,11 @@ func NewEventGroup(lb LoadBalance) EventLoopGroup {
 }
 
 func (g *eventLoopGroup) Next(addr net.Addr) *eventloop {
-	return g.loadBalance.next(g.loops)
+	return g.loadBalance.next(g.loops, addr)
 }
 
-func (g *eventLoopGroup) Register(e *eventloop) error {
-	return nil
+func (g *eventLoopGroup) Register(e *eventloop) {
+	g.loops = append(g.loops, e)
 }
 
 type LoadBalance int
@@ -56,7 +60,7 @@ type roundRobin struct {
 	idx int
 }
 
-func (r *roundRobin) next(loops []*eventloop) (e *eventloop) {
+func (r *roundRobin) next(loops []*eventloop, addr net.Addr) (e *eventloop) {
 	e = loops[r.idx]
 	r.idx = (r.idx + 1) % len(loops)
 	return
@@ -66,7 +70,7 @@ func (r *roundRobin) next(loops []*eventloop) (e *eventloop) {
 type leastConnections struct {
 }
 
-func (l *leastConnections) next(loops []*eventloop) (e *eventloop) {
+func (l *leastConnections) next(loops []*eventloop, addr net.Addr) (e *eventloop) {
 	return
 }
 
@@ -75,6 +79,7 @@ type random struct {
 	idx int
 }
 
-func (r *random) next(loops []*eventloop) (e *eventloop) {
-	return
+func (r *random) next(loops []*eventloop, addr net.Addr) (e *eventloop) {
+	rand.Seed(time.Now().UnixNano())
+	return loops[rand.Intn(len(loops))]
 }
