@@ -25,6 +25,9 @@ type Options struct {
 
 	// 负载均衡配置
 	Lb LoadBalance
+
+	// subReactor 对应的 eventloop 数量
+	LoopNum int
 }
 
 func WithRouter(r Router) Option {
@@ -42,5 +45,11 @@ func WithCodec(codec codec.ICodec) Option {
 func WithLb(lb LoadBalance) Option {
 	return func(opts *Options) {
 		opts.Lb = lb
+	}
+}
+
+func WithLoopNum(loopNum int) Option {
+	return func(opts *Options) {
+		opts.LoopNum = loopNum
 	}
 }

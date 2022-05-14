@@ -14,25 +14,43 @@ type Reactor interface {
 	Run()
 }
 
-type listener struct {
+type acceptor struct {
 	addr net.Addr
-	ln   net.Listener
 	lnfd int
 	loop *eventloop
 }
 
-func NewListener(fd int, addr net.Addr, ln net.Listener, loop *eventloop) *listener {
-	return &listener{lnfd: fd, addr: addr, ln: ln, loop: loop}
+func NewAcceptor(network, addr string) (Reactor, error) {
+	// 生成一个 Listener（主要是拿 listenerfd 加入 eventloop）
+	// listen, err := net.Listen(network, addr)
+	// 这里不使用 net.Listen，这个会将 fd 直接加入 netpoll 的 eventloop，不确定会不会有其他影响
+	socketfd, err := internal.SocketListen(network, addr)
+	if err != nil {
+		return nil, err
+	}
+	mainLoop, err := NewLoop(-1)
+	if err != nil {
+		return nil, err
+	}
+
+	// 将 socketfd 加入 mainLoop 的 epoll 事件中监听可读事件。
+	// 发生读事件说明有连接进入（监听套接字的可读事件就是tcp全连接队列非空）
+	// https://zhuanlan.zhihu.com/p/399651675
+	if err := mainLoop.epoll.RegRead(socketfd); err != nil {
+		return nil, err
+	}
+
+	return &acceptor{lnfd: socketfd, loop: mainLoop}, nil
 }
 
-func (l *listener) Run() {
+func (l *acceptor) Run() {
 	if err := l.loop.Loop(); err != nil {
 		log.Printf("loop error, %v \n", err)
 		return
 	}
 }
 
-func (l *listener) HandleEvent(fd int, _ internal.EventType) error {
+func (l *acceptor) HandleEvent(fd int, _ internal.EventType) error {
 	// 建立新链接
 	connfd, sa, err := unix.Accept(fd)
 	if err != nil {
