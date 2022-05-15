@@ -21,6 +21,18 @@ type Epoll struct {
 
 type EventType = uint32
 
+//
+// const (
+//
+// 	// ReadEvents EPOLLPRI 代表有紧急数据需要读取
+// 	// https://stackoverflow.com/questions/15422919/difference-between-pollin-and-pollpri-in-poll-syscall
+// 	ReadEvents = unix.EPOLLIN | unix.EPOLLPRI
+//
+// 	WriteEvent = unix.EPOLLOUT
+//
+// 	ErrEvent = unix.EPOLLERR
+// )
+
 // CreateEpoll 创建Epoll实例
 func CreateEpoll() (*Epoll, error) {
 	epoll := new(Epoll)
@@ -57,8 +69,9 @@ func (ep *Epoll) Polling(callback func(fd int, eventType EventType) error) error
 	for {
 		// 阻塞直到有事件就绪
 		numPolled, err := unix.EpollWait(ep.epfd, events, -1)
-		// TODO: unix.EAGAIN
-		if err != nil {
+		// EINTR https://man7.org/linux/man-pages/man2/epoll_wait.2.html
+		if err != nil && err != unix.EINTR {
+			log.Printf("epollwait error, %v \n", err)
 			continue
 		}
 
@@ -67,6 +80,7 @@ func (ep *Epoll) Polling(callback func(fd int, eventType EventType) error) error
 		for i := 0; i < numPolled; i++ {
 			ev := events[i]
 			if pfd := int(ev.Fd); pfd != ep.eventfd { // io事件就绪，非内部任务
+				// ev.Events 是一个 bitmask， 可能出现的事件： https://man7.org/linux/man-pages/man2/epoll_ctl.2.html
 				if err := callback(pfd, ev.Events); err != nil {
 					log.Printf("callback error, %v \n", err)
 					continue

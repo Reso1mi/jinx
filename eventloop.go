@@ -13,6 +13,8 @@ type eventloop struct {
 	reactor map[int]Reactor // fd 对应的 Reactor
 
 	conncnt uint64
+
+	buffer []byte // read buffer 默认64KB
 }
 
 // NewLoop 创建一个事件循环，idx 为循环序号
@@ -27,6 +29,7 @@ func NewLoop(idx int) (*eventloop, error) {
 		idx:     idx,
 		reactor: make(map[int]Reactor),
 		conncnt: 0,
+		buffer:  make([]byte, 0xffff),
 	}, nil
 }
 

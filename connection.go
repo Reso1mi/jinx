@@ -3,114 +3,80 @@ package jinx
 import (
 	"fmt"
 	"github.com/imlgw/jinx/codec"
-	errorset "github.com/imlgw/jinx/errors"
+	"github.com/imlgw/jinx/internal"
+	"golang.org/x/sys/unix"
 	"net"
 )
 
-type Connection interface {
-	// Start 启动链接
-	Start()
-	// Stop 停止链接
-	Stop()
-	// GetTCPConnection 获取当前链接的socket conn
-	GetTCPConnection() *net.TCPConn
-	// GetConnID 获取当前链接的ID
-	GetConnID() uint
-	// Send 发送数据
-	Send([]byte) error
-}
-
-// HandleFunc 处理链接业务的方法
-type HandleFunc func(*net.TCPConn, []byte, int) error
-
-// 不对外暴露，强制使用New创建
 type connection struct {
-	// tcp套接字
-	conn *net.TCPConn
-	// 链接的ID
-	connID uint
-	// 链接的状态
-	isClose bool
-	// Router绑定
-	router Router
-	// 等待链接退出的channel
-	exitChan chan bool
-	// 编解码器
-	codec codec.ICodec
+	fd         int
+	sa         unix.Sockaddr
+	loop       *eventloop
+	remoteAddr net.Addr
+	localAddr  net.Addr
+	codec      codec.ICodec // 编解码器
+	out        []byte
 }
 
-func (c *connection) Start() {
-	fmt.Println("[Jinx] Connection Start... ConnID = ", c.GetConnID())
-	go c.Read()
+func NewConnection(fd int, sa unix.Sockaddr, remoteAddr net.Addr, loop *eventloop) Reactor {
+	return &connection{
+		fd:         fd,
+		sa:         sa,
+		remoteAddr: remoteAddr,
+		loop:       loop,
+	}
 }
 
-func (c *connection) Stop() {
-	fmt.Println("[Jinx] Connection Stop... ConnID = ", c.GetConnID())
-	if c.isClose {
-		return
-	}
-	c.isClose = true
-	if err := c.conn.Close(); err != nil {
-		fmt.Println("Connection Close err", err)
-		return
-	}
-	close(c.exitChan)
+func (c *connection) Run() {
+	panic("no")
 }
 
-func (c *connection) GetTCPConnection() *net.TCPConn {
-	return c.conn
-}
+func (c *connection) HandleEvent(fd int, eventType internal.EventType) error {
+	if eventType&unix.EPOLLIN != 0 {
+		var buf []byte
+		// TODO: 会有并发的问题吗?
+		n, err := unix.Read(fd, c.loop.buffer)
+		if err == unix.EAGAIN {
+			return nil
+		}
+		buf = c.loop.buffer[:n]
+		fmt.Println(buf)
+		return nil
+	}
 
-func (c *connection) GetConnID() uint {
-	return c.connID
-}
+	if eventType&unix.EPOLLOUT != 0 {
 
-func (c *connection) Send(data []byte) error {
-	if c.isClose {
-		return errorset.ErrConnectionClosed
+		if len(c.out) != 0 {
+			// 当内核缓冲区满的时候可能无法完全写入，n < len(c.out)
+			n, err := unix.Write(fd, c.out)
+			if err != nil {
+				return c.Close()
+			}
+			if n == len(c.out) {
+				c.out = nil
+			} else {
+				// 剩余 c.out[n:]
+				c.out = c.out[n:]
+			}
+		}
+
+		// c.out 中的数据已经全部写入内核，暂时不再需要监听写事件
+		if len(c.out) == 0 {
+			if err := c.loop.epoll.ModRead(c.fd); err != nil {
+				return err
+			}
+		}
 	}
-	// encode data
-	encoded, err := c.codec.Encode(data)
-	if err != nil {
-		fmt.Println("encode data err", string(data))
-		return err
-	}
-	if _, err := c.conn.Write(encoded); err != nil {
-		fmt.Println("conn write msg err", err)
-		return err
-	}
+
 	return nil
 }
 
-func (c *connection) Read() {
-	fmt.Println("[Jinx] Reader goroutine is running")
-	defer fmt.Println("[Jinx] Reader Stop")
-	defer c.Stop()
-
-	for {
-		buf, err := c.codec.Decode(c.conn)
-		if err != nil {
-			fmt.Println("[Jinx] Read from Client errors", err)
-			break
-		}
-		req := NewRequest(c, buf)
-		// 执行路由绑定的方法
-		go func() {
-			c.router.BeforeHandle(req)
-			c.router.Handle(req)
-			c.router.AfterHandle(req)
-		}()
+func (c *connection) Close() error {
+	c.loop = nil
+	c.out = nil
+	delete(c.loop.reactor, c.fd)
+	if err := unix.Close(c.fd); err != nil {
+		return err
 	}
-}
-
-func NewConnection(conn *net.TCPConn, connID uint, router Router, codec codec.ICodec) Connection {
-	c := &connection{
-		conn:     conn,
-		connID:   connID,
-		isClose:  false,
-		router:   router,
-		exitChan: make(chan bool, 1),
-		codec:    codec,
-	}
-	return c
+	return nil
 }
