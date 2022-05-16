@@ -5,6 +5,5 @@ import (
 )
 
 type Reactor interface {
-	HandleEvent(fd int, eventType internal.EventType) error
-	Run()
+	handleEvent(fd int, eventType internal.EventType) error
 }

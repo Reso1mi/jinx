@@ -44,14 +44,13 @@ func Run(network, addr string, opts ...Option) error {
 	}
 
 	// 初始化 loopGroup
-	loopGroup = NewEventGroup(options.Lb)
-
+	loopGroup = newEventGroup(options.Lb)
 	// 创建并启动 listener
-	listener, err := NewListener(network, addr)
+	listener, err := newListener(network, addr)
 	if err != nil {
 		return err
 	}
-	go listener.Run()
+	go listener.run()
 
 	loopNum := options.LoopNum
 	if loopNum <= 0 {
@@ -61,13 +60,13 @@ func Run(network, addr string, opts ...Option) error {
 
 	// 创建并启动 loopNum 个事件循环
 	for i := 0; i < loopNum; i++ {
-		loop, err := NewLoop(i)
+		loop, err := newLoop(i)
 		if err != nil {
 			return err
 		}
 		loopGroup.Register(loop)
 		go func() {
-			err := loop.Loop()
+			err := loop.poll()
 			if err != nil {
 				log.Printf("create and run loop error, %v \n", err)
 			}

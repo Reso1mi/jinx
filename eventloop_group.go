@@ -20,7 +20,7 @@ type eventLoopGroup struct {
 	}
 }
 
-func NewEventGroup(lb LoadBalance) EventLoopGroup {
+func newEventGroup(lb LoadBalance) EventLoopGroup {
 	switch lb {
 	case LeastConnections:
 		return &eventLoopGroup{loadBalance: &roundRobin{0}}

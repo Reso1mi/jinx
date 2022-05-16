@@ -1,24 +1,30 @@
 package jinx
 
 import (
-	"fmt"
 	"github.com/imlgw/jinx/codec"
+	"github.com/imlgw/jinx/errors"
 	"github.com/imlgw/jinx/internal"
 	"golang.org/x/sys/unix"
+	"log"
 	"net"
+	"sync"
+	"time"
 )
 
 type connection struct {
+	mux        sync.Mutex
 	fd         int
 	sa         unix.Sockaddr
 	loop       *eventloop
 	remoteAddr net.Addr
 	localAddr  net.Addr
 	codec      codec.ICodec // 编解码器
-	out        []byte
+	outBuffer  []byte       // 写缓存
+	inBuffer   []byte       // 读缓存
+	closed     bool
 }
 
-func NewConnection(fd int, sa unix.Sockaddr, remoteAddr net.Addr, loop *eventloop) Reactor {
+func newConnection(fd int, sa unix.Sockaddr, remoteAddr net.Addr, loop *eventloop) *connection {
 	return &connection{
 		fd:         fd,
 		sa:         sa,
@@ -27,53 +33,67 @@ func NewConnection(fd int, sa unix.Sockaddr, remoteAddr net.Addr, loop *eventloo
 	}
 }
 
-func (c *connection) Run() {
-	panic("no")
+// Read from client，将 inBuffer 或者内核中的数据写入 b
+func (c *connection) Read(b []byte) (int, error) {
+	if c.closed {
+		return 0, errors.ErrConnClosed
+	}
+	return copy(b, c.inBuffer), nil
 }
 
-func (c *connection) HandleEvent(fd int, eventType internal.EventType) error {
+// Write b to client，将 b 中的数据写入 outBuffer 或者内核
+func (c *connection) Write(b []byte) (int, error) {
+	if c.closed {
+		return 0, errors.ErrConnClosed
+	}
+
+	// 没有历史数据
+	if len(c.outBuffer) == 0 {
+		writen, err := unix.Write(c.fd, b)
+		if err != nil {
+			return writen, err
+		}
+
+		if writen < len(b) {
+			// 没写完，将剩余数据先存入 outBuffer 然后注册读写事件
+			// TODO: 可能存在 outBuffer 太小的问题，需要一个弹性扩容的结构
+			copy(c.outBuffer, b[writen:])
+			if err := c.loop.epoll.RegReadWrite(c.fd); err != nil {
+				log.Printf("conn write [RegReadWrite] error, %v \n", err)
+				return 0, c.Close()
+			}
+		}
+		return len(b), nil
+	}
+
+	// 有历史数据，先写入 outBuffer 等待可写事件
+	c.outBuffer = append(c.outBuffer, b...)
+
+	return len(b), nil
+}
+
+func (c *connection) LocalAddr() net.Addr                { return c.localAddr }
+func (c *connection) RemoteAddr() net.Addr               { return c.remoteAddr }
+func (c *connection) SetDeadline(t time.Time) error      { return errors.ErrUnsupportedOp }
+func (c *connection) SetReadDeadline(t time.Time) error  { return errors.ErrUnsupportedOp }
+func (c *connection) SetWriteDeadline(t time.Time) error { return errors.ErrUnsupportedOp }
+
+// handleEvent 作为 reactor 响应 epoll 事件
+func (c *connection) handleEvent(_ int, eventType internal.EventType) error {
 	if eventType&unix.EPOLLIN != 0 {
-		var buf []byte
-		// TODO: 会有并发的问题吗?
-		n, err := unix.Read(fd, c.loop.buffer)
-		if err == unix.EAGAIN {
-			return nil
-		}
-		buf = c.loop.buffer[:n]
-		fmt.Println(buf)
-		return nil
+		return c.loop.handleReadEvent(c)
 	}
 
-	if eventType&unix.EPOLLOUT != 0 {
-
-		if len(c.out) != 0 {
-			// 当内核缓冲区满的时候可能无法完全写入，n < len(c.out)
-			n, err := unix.Write(fd, c.out)
-			if err != nil {
-				return c.Close()
-			}
-			if n == len(c.out) {
-				c.out = nil
-			} else {
-				// 剩余 c.out[n:]
-				c.out = c.out[n:]
-			}
-		}
-
-		// c.out 中的数据已经全部写入内核，暂时不再需要监听写事件
-		if len(c.out) == 0 {
-			if err := c.loop.epoll.ModRead(c.fd); err != nil {
-				return err
-			}
-		}
+	if eventType&unix.EPOLLOUT != 0 && len(c.outBuffer) != 0 {
+		return c.loop.handleWriteEvent(c)
 	}
-
 	return nil
 }
 
 func (c *connection) Close() error {
 	c.loop = nil
-	c.out = nil
+	c.outBuffer = nil
+	c.closed = true
 	delete(c.loop.reactor, c.fd)
 	if err := unix.Close(c.fd); err != nil {
 		return err
