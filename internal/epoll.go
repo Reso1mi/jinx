@@ -96,7 +96,6 @@ func (ep *Epoll) Polling(callback func(fd int, eventType EventType) error) error
 		if runTask {
 			log.Println("run all task !")
 		}
-		return nil
 	}
 }
 

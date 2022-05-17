@@ -4,67 +4,96 @@ import (
 	"github.com/imlgw/jinx/codec"
 	"log"
 	"runtime"
+	"sync"
 )
 
 type Server interface {
-
-	// Start 启动服务器
-	Start()
-
-	// Stop 停止服务器
-	Stop()
-
-	// Serve 开始服务
-	Serve()
+	Handler
+	Run() error
 }
 
 type server struct {
 	name      string
-	ipVersion string
-	ip        string
-	port      int
-	opts      *Options
+	network   string
+	addr      string
+	options   *Options
+	ln        *listener
+	started   bool
+	wg        sync.WaitGroup
+	loopGroup EventLoopGroup
+	loopNum   int
+	pipeline  handler
 }
 
-func (s *server) Start() {
-
+func (s *server) OnOpen(f func(c *connection)) {
+	s.pipeline.onOpen = f
 }
 
-func (s *server) Stop() {
-
+func (s *server) OnClose(f func(c *connection)) {
+	s.pipeline.onClose = f
 }
 
-func (s *server) Serve() {
+func (s *server) OnRead(f func(c *connection)) {
+	s.pipeline.onRead = f
 }
 
-func Run(network, addr string, opts ...Option) error {
-	options := LoadOptions(opts...)
-	if options.Codec == nil {
-		options.Codec = codec.NewDefaultLengthFieldCodec()
+func (s *server) OnWrite(f func(c *connection)) {
+	s.pipeline.onWrite = f
+}
+
+func (s *server) OnData(f func(c *connection)) {
+	s.pipeline.onData = f
+}
+
+func NewServer(network, addr string, opts ...Option) (Server, error) {
+	s := new(server)
+
+	// option 加载
+	s.options = LoadOptions(opts...)
+	if s.options.Codec == nil {
+		s.options.Codec = codec.NewDefaultLengthFieldCodec()
 	}
+
+	if s.options.LoopNum <= 0 {
+		// 不设置默认是 cpu 个数
+		s.loopNum = runtime.NumCPU()
+	}
+
+	s.network = network
+	s.addr = addr
 
 	// 初始化 loopGroup
-	loopGroup = newEventGroup(options.Lb)
-	// 创建并启动 listener
-	listener, err := newListener(network, addr)
-	if err != nil {
-		return err
-	}
-	go listener.run()
+	s.loopGroup = newEventGroup(s.options.Lb)
 
-	loopNum := options.LoopNum
-	if loopNum <= 0 {
-		// 不设置默认是 cpu 个数
-		loopNum = runtime.NumCPU()
+	// 创建 listener
+	listener, err := newListener(s.network, s.addr)
+	if err != nil {
+		return nil, err
 	}
+	s.ln = listener
+
+	return s, nil
+}
+
+func (s *server) Run() error {
+
+	// 启动 listener
+	s.wg.Add(1)
+	go func() {
+		if err := s.ln.run(); err != nil {
+			s.wg.Done()
+			return
+		}
+		s.wg.Done()
+	}()
 
 	// 创建并启动 loopNum 个事件循环
-	for i := 0; i < loopNum; i++ {
+	for i := 0; i < s.loopNum; i++ {
 		loop, err := newLoop(i)
 		if err != nil {
 			return err
 		}
-		loopGroup.Register(loop)
+		s.loopGroup.Register(loop)
 		go func() {
 			err := loop.poll()
 			if err != nil {

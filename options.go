@@ -17,8 +17,6 @@ func LoadOptions(options ...Option) *Options {
 
 // Options are configurations for the jinx application.
 type Options struct {
-	// server options
-	Router Router
 
 	// both server & client options
 	Codec codec.ICodec
@@ -28,12 +26,6 @@ type Options struct {
 
 	// subReactor 对应的 eventloop 数量
 	LoopNum int
-}
-
-func WithRouter(r Router) Option {
-	return func(opts *Options) {
-		opts.Router = r
-	}
 }
 
 func WithCodec(codec codec.ICodec) Option {

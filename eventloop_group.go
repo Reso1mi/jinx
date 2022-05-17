@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-var loopGroup EventLoopGroup
-
 type EventLoopGroup interface {
 	Next(addr net.Addr) *eventloop
 	Register(e *eventloop)
@@ -23,11 +21,11 @@ type eventLoopGroup struct {
 func newEventGroup(lb LoadBalance) EventLoopGroup {
 	switch lb {
 	case LeastConnections:
-		return &eventLoopGroup{loadBalance: &roundRobin{0}}
+		return &eventLoopGroup{loadBalance: &leastConnections{}}
 	case Random:
 		return &eventLoopGroup{loadBalance: &random{}}
 	case RoundRobin:
-		return &eventLoopGroup{loadBalance: &leastConnections{}}
+		return &eventLoopGroup{loadBalance: &roundRobin{}}
 	default:
 		return &eventLoopGroup{loadBalance: &roundRobin{0}}
 	}

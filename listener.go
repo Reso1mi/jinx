@@ -39,11 +39,12 @@ func newListener(network, addr string) (*listener, error) {
 	return l, nil
 }
 
-func (l *listener) run() {
+func (l *listener) run() error {
 	if err := l.loop.poll(); err != nil {
 		log.Printf("loop error, %v \n", err)
-		return
+		return err
 	}
+	return nil
 }
 
 func (l *listener) handleEvent(fd int, _ internal.EventType) error {

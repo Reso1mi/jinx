@@ -30,6 +30,8 @@ func newConnection(fd int, sa unix.Sockaddr, remoteAddr net.Addr, loop *eventloo
 		sa:         sa,
 		remoteAddr: remoteAddr,
 		loop:       loop,
+		inBuffer:   make([]byte, 0xffff),
+		outBuffer:  make([]byte, 0xffff),
 	}
 }
 
@@ -54,11 +56,14 @@ func (c *connection) Write(b []byte) (int, error) {
 			return writen, err
 		}
 
+		if writen <= 0 {
+			writen = 0
+		}
 		if writen < len(b) {
 			// 没写完，将剩余数据先存入 outBuffer 然后注册读写事件
 			// TODO: 可能存在 outBuffer 太小的问题，需要一个弹性扩容的结构
 			copy(c.outBuffer, b[writen:])
-			if err := c.loop.epoll.RegReadWrite(c.fd); err != nil {
+			if err := c.loop.epoll.ModReadWrite(c.fd); err != nil {
 				log.Printf("conn write [RegReadWrite] error, %v \n", err)
 				return 0, c.Close()
 			}
@@ -91,10 +96,10 @@ func (c *connection) handleEvent(_ int, eventType internal.EventType) error {
 }
 
 func (c *connection) Close() error {
+	delete(c.loop.reactor, c.fd)
 	c.loop = nil
 	c.outBuffer = nil
 	c.closed = true
-	delete(c.loop.reactor, c.fd)
 	if err := unix.Close(c.fd); err != nil {
 		return err
 	}

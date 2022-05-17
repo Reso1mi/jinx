@@ -17,6 +17,8 @@ type eventloop struct {
 	reactor map[int]Reactor // fd 对应的 Reactor
 
 	conncnt uint64
+
+	ser *server
 }
 
 // NewLoop 创建一个事件循环，idx 为循环序号
@@ -30,6 +32,7 @@ func newLoop(idx int) (*eventloop, error) {
 		epoll:   epoll,
 		idx:     idx,
 		conncnt: 0,
+		reactor: make(map[int]Reactor),
 	}, nil
 }
 
@@ -60,6 +63,11 @@ func (loop *eventloop) handleReadEvent(c *connection) error {
 	// TODO: 动态调整 inBuffer 大小 （RingBuffer?）
 	n, err := unix.Read(c.fd, c.inBuffer)
 	if err != nil || n == 0 {
+		if err == unix.EAGAIN {
+			// https://stackoverflow.com/questions/14370489/what-can-cause-a-resource-temporarily-unavailable-on-sock-send-command
+			return nil
+		}
+		log.Printf("handleReadEvent err, %v \n", err)
 		return c.Close()
 	}
 	return nil
@@ -106,7 +114,7 @@ func (loop *eventloop) handleAccept(fd int) error {
 	}
 
 	addr := sockaddrToTCPOrUnixAddr(sa)
-	nextLoop := loopGroup.Next(addr)
+	nextLoop := loop.ser.loopGroup.Next(addr)
 
 	// 将 connfd 的读写事件注册到 epoll 的 evnet_list
 	if err := nextLoop.epoll.RegReadWrite(connfd); err != nil {
