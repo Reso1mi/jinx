@@ -14,7 +14,7 @@ type eventloop struct {
 
 	epoll *internal.Epoll
 
-	reactor map[int]Reactor // fd 对应的 Reactor
+	reactor map[int]reactor // fd 对应的 Reactor
 
 	conncnt uint64
 
@@ -22,7 +22,7 @@ type eventloop struct {
 }
 
 // NewLoop 创建一个事件循环，idx 为循环序号
-func newLoop(idx int) (*eventloop, error) {
+func newLoop(idx int, ser *server) (*eventloop, error) {
 	epoll, err := internal.CreateEpoll()
 	if err != nil {
 		return nil, err
@@ -32,7 +32,8 @@ func newLoop(idx int) (*eventloop, error) {
 		epoll:   epoll,
 		idx:     idx,
 		conncnt: 0,
-		reactor: make(map[int]Reactor),
+		reactor: make(map[int]reactor),
+		ser:     ser,
 	}, nil
 }
 
@@ -70,11 +71,18 @@ func (loop *eventloop) handleReadEvent(c *connection) error {
 		log.Printf("handleReadEvent err, %v \n", err)
 		return c.Close()
 	}
+	if loop.ser.onRead != nil {
+		loop.ser.onRead(c)
+	}
 	return nil
 }
 
 // write eventloop 可写事件处理，将 outBuffer 中的数据写入内核（flush）
 func (loop *eventloop) handleWriteEvent(c *connection) error {
+	if loop.ser.onWrite != nil {
+		loop.ser.onWrite(c)
+	}
+
 	if len(c.outBuffer) != 0 {
 		// 当内核缓冲区满的时候可能无法完全写入，writen < len(c.out)
 		writen, err := unix.Write(c.fd, c.outBuffer)
@@ -127,6 +135,9 @@ func (loop *eventloop) handleAccept(fd int) error {
 	// 将 conn 绑定到该 loop 对应 fd 的回调上
 	nextLoop.reactor[connfd] = conn
 	atomic.AddUint64(&nextLoop.conncnt, 1)
+	if loop.ser.onOpen != nil {
+		loop.ser.onOpen(conn)
+	}
 	return nil
 }
 
@@ -148,5 +159,8 @@ func (loop *eventloop) Close() error {
 	if err := loop.epoll.Close(); err != nil {
 		return err
 	}
+	loop.ser = nil
+	loop.reactor = nil
+	loop.epoll = nil
 	return nil
 }

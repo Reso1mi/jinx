@@ -1,14 +1,14 @@
 package jinx
 
 import (
-	"math/rand"
+	"log"
 	"net"
-	"time"
 )
 
 type EventLoopGroup interface {
 	Next(addr net.Addr) *eventloop
 	Register(e *eventloop)
+	StopAll() error
 }
 
 type eventLoopGroup struct {
@@ -27,7 +27,7 @@ func newEventGroup(lb LoadBalance) EventLoopGroup {
 	case RoundRobin:
 		return &eventLoopGroup{loadBalance: &roundRobin{}}
 	default:
-		return &eventLoopGroup{loadBalance: &roundRobin{0}}
+		return &eventLoopGroup{loadBalance: &roundRobin{}}
 	}
 }
 
@@ -39,45 +39,29 @@ func (g *eventLoopGroup) Register(e *eventloop) {
 	g.loops = append(g.loops, e)
 }
 
-type LoadBalance int
+func (g *eventLoopGroup) StopAll() error {
+	// 关闭所有 conn
+	if err := g.CloseAllConn(); err != nil {
+		log.Printf("close CloseAllConn error  %v \n", err)
+		return err
+	}
 
-const (
-	// RoundRobin 轮询法，即将请求按照顺序轮流的分配到服务器上，均衡的对待每一台后端的服务器,不关心服务器的的连接数和负载情况
-	RoundRobin LoadBalance = iota
-
-	// LeastConnections 根据当前的连接情况，动态的选取其中当前积压连接数最少的一台服务器来处理当前请求
-	// 尽可能的提高后台服务器利用率，将负载合理的分流到每一台服务器。
-	LeastConnections
-
-	// Random 根据服务器列表的大小来随机获取其中的一台来访问，随着调用量的增大，实际效果越来越近似于平均分配到没一台服务器，和轮询的效果类似
-	Random
-)
-
-// RoundRobin
-type roundRobin struct {
-	idx int
+	for _, loop := range g.loops {
+		if err := loop.Close(); err != nil {
+			log.Printf("close eventloop error  %v \n", err)
+			return err
+		}
+	}
+	return nil
 }
 
-func (r *roundRobin) next(loops []*eventloop, addr net.Addr) (e *eventloop) {
-	e = loops[r.idx]
-	r.idx = (r.idx + 1) % len(loops)
-	return
-}
-
-// LeastConnections
-type leastConnections struct {
-}
-
-func (l *leastConnections) next(loops []*eventloop, addr net.Addr) (e *eventloop) {
-	return
-}
-
-// Random
-type random struct {
-	idx int
-}
-
-func (r *random) next(loops []*eventloop, addr net.Addr) (e *eventloop) {
-	rand.Seed(time.Now().UnixNano())
-	return loops[rand.Intn(len(loops))]
+func (g *eventLoopGroup) CloseAllConn() error {
+	for _, loop := range g.loops {
+		for _, conn := range loop.reactor {
+			if err := conn.Close(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
