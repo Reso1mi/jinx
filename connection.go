@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+type Conn interface {
+	net.Conn
+	IsOpen() bool
+}
+
 type connection struct {
 	mux        sync.Mutex
 	fd         int
@@ -31,7 +36,6 @@ func newConnection(fd int, sa unix.Sockaddr, remoteAddr net.Addr, loop *eventloo
 		remoteAddr: remoteAddr,
 		loop:       loop,
 		inBuffer:   make([]byte, 0xffff),
-		outBuffer:  make([]byte, 0xffff),
 	}
 }
 
@@ -61,7 +65,8 @@ func (c *connection) Write(b []byte) (int, error) {
 		}
 		if writen < len(b) {
 			// 没写完，将剩余数据先存入 outBuffer 然后注册读写事件
-			// TODO: 可能存在 outBuffer 太小的问题，需要一个弹性扩容的结构
+			// TODO: 需要一个弹性扩容的结构
+			c.outBuffer = make([]byte, writen)
 			copy(c.outBuffer, b[writen:])
 			if err := c.loop.epoll.ModReadWrite(c.fd); err != nil {
 				log.Printf("conn write [RegReadWrite] error, %v \n", err)
@@ -111,3 +116,5 @@ func (c *connection) Close() error {
 	}
 	return nil
 }
+
+func (c *connection) IsOpen() bool { return !c.closed }

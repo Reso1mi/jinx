@@ -20,7 +20,7 @@ func newListener(network, addr string, ser *server) (*listener, error) {
 	// 生成一个 Listener（主要是拿 listenerfd 加入 eventloop）
 	// listen, err := net.Listen(network, addr)
 	// 这里不使用 net.Listen，这个会将 fd 直接加入 netpoll 的 eventloop，不确定会不会有其他影响
-	socketfd, err := internal.SocketListen(network, addr)
+	socketfd, naddr, err := internal.SocketListen(network, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func newListener(network, addr string, ser *server) (*listener, error) {
 	if err := mainLoop.epoll.RegRead(socketfd); err != nil {
 		return nil, err
 	}
-	l := &listener{lnfd: socketfd, loop: mainLoop}
+	l := &listener{lnfd: socketfd, loop: mainLoop, addr: &net.TCPAddr{IP: naddr.IP, Port: naddr.Port}}
 	// 绑定到 loop 的响应器上
 	mainLoop.reactor[socketfd] = l
 	atomic.AddUint64(&mainLoop.conncnt, 1)

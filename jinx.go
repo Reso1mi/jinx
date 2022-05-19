@@ -10,10 +10,13 @@ type Server interface {
 	Handler
 	Run() error
 	Stop() error
+	ServerName() string
+	Network() string
+	ServerAddr() string
+	Started() bool
 }
 
 type server struct {
-	name       string
 	network    string
 	addr       string
 	opts       *Options
@@ -21,12 +24,12 @@ type server struct {
 	started    bool
 	wg         sync.WaitGroup
 	loopGroup  EventLoopGroup
-	onBoot     func(s *server)
-	onOpen     func(c *connection)
-	onClose    func(c *connection)
-	onRead     func(c *connection)
-	onWrite    func(c *connection)
-	onShutdown func(s *server)
+	onBoot     func(s Server)
+	onOpen     func(c Conn)
+	onClose    func(c Conn)
+	onRead     func(c Conn)
+	onWrite    func(c Conn)
+	onShutdown func(s Server)
 }
 
 func NewServer(network, addr string, opts ...Option) (Server, error) {
@@ -36,6 +39,9 @@ func NewServer(network, addr string, opts ...Option) (Server, error) {
 	if options.LoopNum <= 0 {
 		// 不设置默认是 cpu 个数
 		options.LoopNum = runtime.NumCPU()
+	}
+	if options.ServerName == "" {
+		options.ServerName = "baobao"
 	}
 
 	s.opts = options
@@ -58,11 +64,11 @@ func (s *server) Run() error {
 	// 启动 listener
 	s.wg.Add(1)
 	go func() {
+		s.wg.Done()
 		if err := s.ln.run(); err != nil {
 			s.wg.Done()
 			return
 		}
-		s.wg.Done()
 	}()
 
 	// 创建并启动 loopNum 个事件循环
@@ -108,9 +114,13 @@ func (s *server) Stop() error {
 	return nil
 }
 
-func (s *server) OnBoot(f func(s *server))      { s.onBoot = f }
-func (s *server) OnOpen(f func(c *connection))  { s.onOpen = f }
-func (s *server) OnClose(f func(c *connection)) { s.onClose = f }
-func (s *server) OnRead(f func(c *connection))  { s.onRead = f }
-func (s *server) OnWrite(f func(c *connection)) { s.onWrite = f }
-func (s *server) OnShutdown(f func(s *server))  { s.onShutdown = f }
+func (s *server) ServerName() string          { return s.opts.ServerName }
+func (s *server) Network() string             { return s.network }
+func (s *server) ServerAddr() string          { return s.addr }
+func (s *server) Started() bool               { return s.started }
+func (s *server) OnBoot(f func(s Server))     { s.onBoot = f }
+func (s *server) OnOpen(f func(c Conn))       { s.onOpen = f }
+func (s *server) OnClose(f func(c Conn))      { s.onClose = f }
+func (s *server) OnRead(f func(c Conn))       { s.onRead = f }
+func (s *server) OnWrite(f func(c Conn))      { s.onWrite = f }
+func (s *server) OnShutdown(f func(s Server)) { s.onShutdown = f }

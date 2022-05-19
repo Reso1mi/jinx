@@ -11,7 +11,7 @@ func TestSocketBind(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		lnfd, err := SocketListen("tcp", ":9876")
+		lnfd, _, err := SocketListen("tcp", ":9876")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -71,6 +71,7 @@ func (loop *eventloop) handleReadEvent(c *connection) error {
 		log.Printf("handleReadEvent err, %v \n", err)
 		return c.Close()
 	}
+	c.inBuffer = c.inBuffer[:n]
 	if loop.ser.onRead != nil {
 		loop.ser.onRead(c)
 	}
@@ -86,7 +87,8 @@ func (loop *eventloop) handleWriteEvent(c *connection) error {
 	if len(c.outBuffer) != 0 {
 		// 当内核缓冲区满的时候可能无法完全写入，writen < len(c.out)
 		writen, err := unix.Write(c.fd, c.outBuffer)
-		if err != nil {
+		if err != nil && err != unix.EAGAIN {
+			log.Panicf("handleWriteEvent error, %v\n", err)
 			return c.Close()
 		}
 		if writen == len(c.outBuffer) {
