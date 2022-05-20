@@ -1,7 +1,7 @@
 package jinx
 
-// Handler event callback
-type Handler interface {
+// handler event callback
+type handler interface {
 
 	// OnBoot server 启动
 	OnBoot(f func(s Server))

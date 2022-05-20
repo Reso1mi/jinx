@@ -7,7 +7,7 @@ import (
 )
 
 type Server interface {
-	Handler
+	handler
 	Run() error
 	Stop() error
 	ServerName() string
@@ -23,7 +23,7 @@ type server struct {
 	ln         *listener
 	started    bool
 	wg         sync.WaitGroup
-	loopGroup  EventLoopGroup
+	loopGroup  *eventLoopGroup
 	onBoot     func(s Server)
 	onOpen     func(c Conn)
 	onClose    func(c Conn)
@@ -78,13 +78,15 @@ func (s *server) Run() error {
 		if err != nil {
 			return err
 		}
-		s.loopGroup.Register(loop)
+		s.loopGroup.register(loop)
 		go func() {
+			// 服务启动 latch
 			s.wg.Done()
-			err := loop.poll()
-			if err != nil {
+			if err := loop.poll(); err != nil {
 				log.Printf("create and run loop error, %v \n", err)
 			}
+			// 服务关闭 latch，避免并发修改 map 异常
+			s.loopGroup.wg.Done()
 		}()
 	}
 	s.wg.Wait()
@@ -101,8 +103,13 @@ func (s *server) Stop() error {
 		s.onShutdown(s)
 	}
 
+	// TODO: 唤醒所有 eventloop 退出 loop
+
+	// 等待所有 loop
+	// s.loopGroup.wg.Wait()
+
 	// 关闭所有 connection 以及 subReactor 的 eventloop
-	if err := s.loopGroup.StopAll(); err != nil {
+	if err := s.loopGroup.stopAll(); err != nil {
 		return err
 	}
 

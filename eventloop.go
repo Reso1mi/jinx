@@ -124,7 +124,7 @@ func (loop *eventloop) handleAccept(fd int) error {
 	}
 
 	addr := sockaddrToTCPOrUnixAddr(sa)
-	nextLoop := loop.ser.loopGroup.Next(addr)
+	nextLoop := loop.ser.loopGroup.next(addr)
 
 	// 将 connfd 的读写事件注册到 epoll 的 evnet_list
 	if err := nextLoop.epoll.RegReadWrite(connfd); err != nil {
