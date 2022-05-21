@@ -1,1 +1,3 @@
 # jinx
+IO多路复用 + Reactor模式实现的网络库
+> 练手项目，参考（~~抄袭~~）了许多开源项目：gnet，nbio，evio，netty，gev...
