@@ -1,6 +1,7 @@
 package jinx
 
 import (
+	"fmt"
 	"log"
 	"runtime"
 	"sync"
@@ -56,7 +57,7 @@ func NewServer(network, addr string, opts ...Option) (Server, error) {
 		return nil, err
 	}
 	s.ln = listener
-
+	fmt.Println("lnfd", s.ln.lnfd)
 	return s, nil
 }
 
@@ -64,37 +65,36 @@ func (s *server) Run() error {
 	// 启动 listener
 	s.wg.Add(1)
 	go func() {
-		s.wg.Done()
 		if err := s.ln.run(); err != nil {
-			s.wg.Done()
-			return
+			log.Printf("listener loop run error,  %v\n", err)
 		}
+		s.wg.Done()
 	}()
 
 	// 创建并启动 loopNum 个事件循环
 	for i := 0; i < s.opts.LoopNum; i++ {
-		s.wg.Add(1)
 		loop, err := newLoop(i, s)
 		if err != nil {
 			return err
 		}
 		s.loopGroup.register(loop)
+		s.wg.Add(1)
 		go func() {
 			// 服务启动 latch
-			s.wg.Done()
 			if err := loop.poll(); err != nil {
 				log.Printf("create and run loop error, %v \n", err)
 			}
-			// 服务关闭 latch，避免并发修改 map 异常
-			s.loopGroup.wg.Done()
+			s.wg.Done()
+			// // 服务关闭 latch，避免并发修改 map 异常
+			// s.loopGroup.wg.Done()
 		}()
 	}
-	s.wg.Wait()
 	s.started = true
 
 	if s.onBoot != nil {
 		s.onBoot(s)
 	}
+	s.wg.Wait()
 	return nil
 }
 

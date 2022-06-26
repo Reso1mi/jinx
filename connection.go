@@ -102,6 +102,7 @@ func (c *connection) handleEvent(_ int, eventType internal.EventType) error {
 
 // Close 关闭连接
 func (c *connection) Close() error {
+	c.closed = true
 	if c.loop.ser.onClose != nil {
 		c.loop.ser.onClose(c)
 	}
@@ -109,7 +110,6 @@ func (c *connection) Close() error {
 	// 关闭连接，不用关闭 loop
 	c.loop = nil
 	c.outBuffer = nil
-	c.closed = true
 	// 关闭 connfd
 	if err := unix.Close(c.fd); err != nil {
 		return err

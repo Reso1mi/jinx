@@ -5,6 +5,7 @@ import (
 	"net"
 )
 
+// SocketListen 参考：https://zhuanlan.zhihu.com/p/399651675
 func SocketListen(network, addr string) (int, *net.TCPAddr, error) {
 	// 创建一个 socketfd，暂时只支持 tcp4
 	// https://man7.org/linux/man-pages/man2/socket.2.html

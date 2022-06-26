@@ -116,7 +116,9 @@ func (loop *eventloop) handleAccept(fd int) error {
 		return errors.ErrAcceptSocket
 	}
 
-	// 将 connfd 设置为非阻塞模式
+	// 将 connfd 设置为非阻塞模式 [man 2 select]
+	// select 返回可读，和 read 去读，这是两个独立的系统调用，两个操作之间是有窗口的，也就是说 select 返回可读，紧接着去 read，不能保证一定可读
+	// 参考：https://www.zhihu.com/question/37271342
 	if err := unix.SetNonblock(connfd, true); err != nil {
 		_ = unix.Close(connfd)
 		log.Printf("set nfd nonblock error, %v \n", err)
@@ -126,8 +128,8 @@ func (loop *eventloop) handleAccept(fd int) error {
 	addr := sockaddrToTCPOrUnixAddr(sa)
 	nextLoop := loop.ser.loopGroup.next(addr)
 
-	// 将 connfd 的读写事件注册到 epoll 的 evnet_list
-	if err := nextLoop.epoll.RegReadWrite(connfd); err != nil {
+	// 将 connfd 的读事件注册到 epoll 的 event_list
+	if err := nextLoop.epoll.RegRead(connfd); err != nil {
 		log.Printf("reg connfd event rw error, %v \n", err)
 		_ = unix.Close(connfd)
 		return err
