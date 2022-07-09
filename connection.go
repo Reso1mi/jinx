@@ -64,7 +64,7 @@ func (c *connection) Write(b []byte) (int, error) {
 			writen = 0
 		}
 		if writen < len(b) {
-			// 没写完，将剩余数据先存入 outBuffer 然后注册读写事件
+			// TCP写半包: 没写完，将剩余数据先存入 outBuffer 然后注册读写事件
 			// TODO: 需要一个弹性扩容的结构
 			c.outBuffer = make([]byte, writen)
 			copy(c.outBuffer, b[writen:])
