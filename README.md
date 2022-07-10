@@ -92,7 +92,7 @@ func main() {
 
 演示环境：Linux VM-20-13-ubuntu 5.4.0-96-generic
 
-![](https://static.imlgw.top/blog/QQ20220626-233133-HD.gif)
+![](https://static.imlgw.top/blog/qoch6-mimvl.gif)
 
 ## TODO
 - [ ] 内部事件 + tricker
